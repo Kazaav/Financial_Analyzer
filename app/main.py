@@ -43,26 +43,27 @@ PUBLIC_PATHS = ("/login", "/static", "/favicon.ico", "/healthz", "/demo")
 ROOT_PUBLIC_PATHS = {"/"}
 
 
-DEMO_REGISTRY: dict[str, dict[str, str]] = {
-    "it-services": {
-        "analysis_id": "demo-it-services",
-        "title": "IT サービス3社の財務比較",
-        "subtitle": "TIS / アバントグループ / 野村総合研究所 — 2020〜2025 年度",
-        "default_mode": "same_company",
-    },
+DEMO_REGISTRY: dict[str, dict] = {
     "timeseries-nri": {
         "analysis_id": "demo-it-services",
-        "title": "野村総合研究所 6年間の財務推移",
-        "subtitle": "売上・利益・CF・財務指標の経年変化",
+        "title": "野村総合研究所 · 6年間の財務推移",
+        "subtitle": "同一企業時系列モード · JGAAP→IFRS 移行を含む経年変化",
         "default_mode": "same_company",
         "preset": {"selected_company": "4307"},
     },
-    "cross-2024": {
+    "cross-section-2024": {
         "analysis_id": "demo-it-services",
-        "title": "IT サービス3社 2024年度横断比較",
-        "subtitle": "同年度のKPI・指標を一画面で",
+        "title": "IT サービス3社 · 2024年度横断比較",
+        "subtitle": "多社同年度モード · 同業3社のKPI を一画面で比較",
         "default_mode": "same_year",
         "preset": {"selected_year": "2024"},
+    },
+    "custom-all": {
+        "analysis_id": "demo-it-services",
+        "title": "全PDF カスタム比較",
+        "subtitle": "カスタムモード · 3社 × 6年 = 18 PDF を自由に組み合わせ",
+        "default_mode": "custom",
+        "include_all_docs": True,
     },
 }
 
@@ -91,8 +92,9 @@ async def landing_page(request: Request):
     user = read_session_user(request)
     demos = []
     for slug, meta in DEMO_REGISTRY.items():
-        params = {"mode": meta.get("default_mode", "same_year")}
-        params.update(meta.get("preset", {}))
+        params: dict[str, str] = {"mode": meta.get("default_mode", "same_year")}
+        for k, v in meta.get("preset", {}).items():
+            params[k] = str(v)
         href = f"/demo/{slug}?{urlencode(params)}"
         demos.append({
             "slug": slug,
@@ -377,13 +379,22 @@ async def demo_page(
     resolved_year = selected_year if selected_year is not None else preset.get("selected_year")
     resolved_company = selected_company if selected_company is not None else preset.get("selected_company")
 
+    # For custom mode demos with include_all_docs flag, select all PDFs by default
+    resolved_doc_ids = list(selected_docs)
+    if resolved_mode == "custom" and not resolved_doc_ids and meta.get("include_all_docs"):
+        try:
+            rec = load_record(meta["analysis_id"])
+            resolved_doc_ids = [d.id for d in rec.documents]
+        except FileNotFoundError:
+            pass
+
     return _render_analysis_page(
         request,
         meta["analysis_id"],
         resolved_mode,
         resolved_year,
         resolved_company,
-        selected_docs,
+        resolved_doc_ids,
         chart_type,
         report_file=None,
         added=None,

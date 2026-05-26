@@ -356,6 +356,63 @@
     return String(str).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
   }
 
+  /* ── Source page viewer (C3 PDF 原文モーダル) ──────────────────── */
+  function initSourcePopup() {
+    var modal = document.querySelector("[data-source-modal]");
+    if (!modal) return;
+    var imgEl     = modal.querySelector("[data-source-modal-image]");
+    var loadingEl = modal.querySelector("[data-source-modal-loading]");
+    var errorEl   = modal.querySelector("[data-source-modal-error]");
+    var titleEl   = modal.querySelector("[data-source-modal-title]");
+    var companyEl = modal.querySelector("[data-source-modal-company]");
+    var sectionEl = modal.querySelector("[data-source-modal-section]");
+    var labelEl   = modal.querySelector("[data-source-modal-label]");
+    var pageEl    = modal.querySelector("[data-source-modal-page]");
+
+    function open(btn) {
+      var analysis = btn.dataset.sourceAnalysis;
+      var docId    = btn.dataset.sourceDoc;
+      var page     = btn.dataset.sourcePage;
+      var label    = btn.dataset.sourceLabel || "";
+      var section  = btn.dataset.sourceSection || "";
+      var company  = btn.dataset.sourceCompany || "";
+      var year     = btn.dataset.sourceYear || "";
+      var metric   = btn.dataset.sourceMetric || "";
+
+      companyEl.textContent = company + (year ? " · " + year + "年度" : "");
+      titleEl.textContent   = metric;
+      sectionEl.textContent = section;
+      labelEl.textContent   = label;
+      pageEl.textContent    = "PDF p." + page;
+
+      imgEl.style.display = "none";
+      errorEl.hidden = true;
+      loadingEl.style.display = "block";
+      modal.hidden = false;
+      document.body.style.overflow = "hidden";
+
+      var url = "/source-page/" + encodeURIComponent(analysis) + "/" + encodeURIComponent(docId) + "/" + encodeURIComponent(page) + ".png";
+      imgEl.onload  = function () { loadingEl.style.display = "none"; imgEl.style.display = "block"; };
+      imgEl.onerror = function () { loadingEl.style.display = "none"; errorEl.hidden = false; };
+      imgEl.src = url + "?t=" + Date.now();
+    }
+
+    function close() {
+      modal.hidden = true;
+      document.body.style.overflow = "";
+      imgEl.src = "";
+    }
+
+    document.addEventListener("click", function (e) {
+      var btn = e.target.closest("[data-source-popup]");
+      if (btn) { e.preventDefault(); open(btn); return; }
+      if (e.target.closest("[data-source-close]")) close();
+    });
+    document.addEventListener("keydown", function (e) {
+      if (e.key === "Escape" && !modal.hidden) close();
+    });
+  }
+
   /* ── Sidebar drawer toggle (mobile) ───────────────────────────── */
   function initSidebarDrawer() {
     var toggle = document.querySelector("[data-sidebar-toggle]");
@@ -390,4 +447,5 @@
   initTabs();
   initSidebarForm();
   initSidebarDrawer();
+  initSourcePopup();
 })();

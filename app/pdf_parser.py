@@ -5,6 +5,7 @@ import unicodedata
 from dataclasses import dataclass
 from functools import lru_cache
 from pathlib import Path
+from typing import Any
 
 import fitz
 
@@ -563,10 +564,11 @@ def extract_metrics_from_statements(pages: list[PageText]) -> dict[str, Extracte
     return extracted
 
 
-def extract_metrics(pages: list[PageText], default_unit: str) -> tuple[dict[str, float | None], list[str], float]:
+def extract_metrics(pages: list[PageText], default_unit: str) -> tuple[dict[str, float | None], dict[str, dict[str, Any]], list[str], float]:
     major = extract_metrics_from_major_indicators(pages)
     statements = extract_metrics_from_statements(pages)
     metrics: dict[str, float | None] = {key: None for key in DISPLAY_NAMES}
+    sources: dict[str, dict[str, Any]] = {}
     notes: list[str] = []
 
     # 主要な経営指標等の推移 (MAJOR) is more robust for trend-table metrics:
@@ -579,11 +581,22 @@ def extract_metrics(pages: list[PageText], default_unit: str) -> tuple[dict[str,
     for key in DISPLAY_NAMES:
         if key in PREFER_MAJOR:
             picked = major.get(key) or statements.get(key)
+            origin = "major" if major.get(key) else ("statements" if statements.get(key) else None)
         else:
             picked = statements.get(key) or major.get(key)
+            origin = "statements" if statements.get(key) else ("major" if major.get(key) else None)
         if picked is None:
             continue
         metrics[key] = unit_to_million_yen(picked.value, default_unit, key)
+        sources[key] = {
+            "label": picked.label,
+            "section": "主要な経営指標等の推移" if origin == "major" else "連結財務諸表",
+            "page": picked.page,
+            "raw_value": picked.value,
+            "source_text": picked.source,
+            # 'is_ifrs' flag: heuristic — if the label text contains IFRS markers
+            "is_ifrs": "IFRS" in picked.label or "資本合計" in picked.label or "親会社の所有者" in picked.label,
+        }
         notes.append(f"{DISPLAY_NAMES[key]}: {picked.value:,.0f} ({picked.source})")
 
     essentials = ["revenue", "net_income", "total_assets", "net_assets", "operating_cash_flow"]
@@ -593,7 +606,7 @@ def extract_metrics(pages: list[PageText], default_unit: str) -> tuple[dict[str,
         notes.append("主要項目の抽出数が不足しています。抽出結果レビューでPDF本文と照合してください。")
     if metrics.get("gross_profit") is None:
         notes.append("売上総利益は企業の表示形式により未抽出の場合があります。")
-    return metrics, notes, confidence
+    return metrics, sources, notes, confidence
 
 
 def parse_pdf(path: Path, doc_id: str, original_filename: str) -> FinancialDocument:
@@ -604,7 +617,7 @@ def parse_pdf(path: Path, doc_id: str, original_filename: str) -> FinancialDocum
     english_name = detect_english_name(text)
     edinet_code = detect_edinet_code(text)
     security_code = detect_security_code(text, original_filename, path, company_name, english_name)
-    metrics, notes, confidence = extract_metrics(pages, unit)
+    metrics, metric_sources, notes, confidence = extract_metrics(pages, unit)
     if security_code:
         notes.insert(0, f"証券コード: {security_code}")
     if edinet_code:
@@ -624,6 +637,7 @@ def parse_pdf(path: Path, doc_id: str, original_filename: str) -> FinancialDocum
         security_code=security_code,
         edinet_code=edinet_code,
         metrics=metrics,
+        metric_sources=metric_sources,
         extraction_notes=notes,
         confidence=confidence,
     )

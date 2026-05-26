@@ -7,9 +7,10 @@ from urllib.parse import urlencode
 from uuid import uuid4
 
 from fastapi import FastAPI, File, Form, HTTPException, Query, Request, UploadFile
-from fastapi.responses import FileResponse, RedirectResponse
+from fastapi.responses import FileResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
+import fitz  # PyMuPDF
 
 from .analysis import METRIC_ORDER, build_analysis
 from .auth import authenticate, clear_login_cookie, login_redirect, read_session_user, require_admin, set_login_cookie
@@ -39,7 +40,7 @@ templates.env.filters["metric"] = fmt_metric
 templates.env.filters["score_label"] = score_label
 
 
-PUBLIC_PATHS = ("/login", "/static", "/favicon.ico", "/healthz", "/demo")
+PUBLIC_PATHS = ("/login", "/static", "/favicon.ico", "/healthz", "/demo", "/source-page")
 ROOT_PUBLIC_PATHS = {"/"}
 
 
@@ -522,3 +523,39 @@ async def download_report(filename: str):
     if not path.exists():
         raise HTTPException(status_code=404, detail="report not found")
     return FileResponse(path, media_type="text/html", filename=path.name)
+
+
+@app.get("/source-page/{analysis_id}/{doc_id}/{page}.png")
+async def source_page_image(analysis_id: str, doc_id: str, page: int):
+    """Render a specific PDF page as a PNG. Used by the C3 source viewer."""
+    try:
+        record = load_record(analysis_id)
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+
+    doc = next((d for d in record.documents if d.id == doc_id), None)
+    if not doc:
+        raise HTTPException(status_code=404, detail="document not found")
+
+    pdf_path = Path(doc.stored_path)
+    if not pdf_path.exists():
+        raise HTTPException(status_code=404, detail="pdf not found on disk")
+
+    if page < 1:
+        raise HTTPException(status_code=400, detail="invalid page")
+
+    try:
+        pdf = fitz.open(pdf_path)
+        if page > pdf.page_count:
+            raise HTTPException(status_code=404, detail="page out of range")
+        pix = pdf[page - 1].get_pixmap(matrix=fitz.Matrix(1.6, 1.6))
+        png_bytes = pix.tobytes("png")
+        pdf.close()
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=f"render failed: {exc}") from exc
+
+    return Response(
+        content=png_bytes,
+        media_type="image/png",
+        headers={"Cache-Control": "public, max-age=3600"},
+    )

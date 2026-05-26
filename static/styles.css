@@ -705,7 +705,84 @@ input[type="radio"]{accent-color:var(--accent)}
 }
 .metric-derived .metric-value{color:#c4b5fd}
 .metric-growth .metric-value{color:#86efac}
-.metric-cell{position:relative}
+.metric-cell{position:relative;white-space:nowrap}
+
+/* Metric source button (C3 PDF原文ビューア trigger) */
+.metric-src-btn{
+  display:inline-flex;align-items:center;gap:4px;
+  margin-left:6px;padding:1px 6px;
+  border:1px solid var(--bd);border-radius:3px;
+  background:transparent;color:var(--t3);
+  font-family:var(--font-mono);font-size:10px;line-height:1.4;letter-spacing:-.02em;
+  cursor:pointer;transition:all 120ms;vertical-align:middle;
+  opacity:.55;
+}
+.metric-src-btn:hover{
+  opacity:1;color:var(--accent);border-color:var(--accent);
+  background:var(--accent-dim);
+}
+.metric-src-page{font-weight:500}
+.metric-src-tag{
+  padding:0 4px;border-radius:2px;
+  background:rgba(110,168,255,.18);color:var(--accent);
+  font-size:9px;font-weight:600;letter-spacing:.05em;
+}
+
+/* Source viewer modal (C3) */
+.source-modal{position:fixed;inset:0;z-index:200;display:flex;align-items:center;justify-content:center}
+.source-modal[hidden]{display:none}
+.source-modal-backdrop{position:absolute;inset:0;background:rgba(8,11,18,.78);backdrop-filter:blur(4px)}
+.source-modal-panel{
+  position:relative;z-index:1;
+  width:min(900px,calc(100vw - 32px));max-height:calc(100vh - 48px);
+  display:flex;flex-direction:column;
+  background:var(--bg-elev-1);border:1px solid var(--bd-strong);
+  border-radius:var(--r-lg);box-shadow:var(--sh-md);overflow:hidden;
+}
+.source-modal-head{
+  display:flex;align-items:flex-start;justify-content:space-between;gap:16px;
+  padding:18px 22px 14px;border-bottom:1px solid var(--bd);
+}
+.source-modal-eyebrow{
+  display:block;font-family:var(--font-mono);font-size:10px;
+  color:var(--accent);letter-spacing:.05em;margin-bottom:6px;
+}
+.source-modal-head h3{font-size:17px;font-weight:600;color:#fff;letter-spacing:-.015em;margin-bottom:10px}
+.source-modal-tags{display:flex;gap:6px;flex-wrap:wrap}
+.source-modal-tag{
+  display:inline-flex;align-items:center;padding:3px 10px;
+  border:1px solid var(--bd-strong);border-radius:3px;
+  background:var(--bg-elev-2);color:var(--t2);
+  font-family:var(--font-mono);font-size:10px;
+}
+.source-modal-close{
+  width:32px;height:32px;border:1px solid var(--bd-strong);border-radius:var(--r-sm);
+  background:transparent;color:var(--t2);font-size:18px;line-height:1;cursor:pointer;
+  display:flex;align-items:center;justify-content:center;flex-shrink:0;
+}
+.source-modal-close:hover{background:var(--bg-elev-3);color:var(--t1);border-color:#384057}
+.source-modal-body{
+  padding:18px 22px 22px;overflow-y:auto;flex:1;min-height:0;
+  background:var(--bg-elev-2);
+  display:flex;align-items:flex-start;justify-content:center;
+}
+.source-modal-loading,.source-modal-error{
+  color:var(--t3);font-size:13px;padding:60px 0;
+}
+.source-modal-error{color:#fca5a5}
+.source-modal-image{
+  max-width:100%;height:auto;
+  border:1px solid var(--bd-strong);border-radius:var(--r-sm);
+  background:#fff;
+  box-shadow:var(--sh-md);
+}
+
+@media(max-width:560px){
+  .source-modal-panel{max-height:calc(100vh - 16px);width:calc(100vw - 16px)}
+  .source-modal-head{padding:14px 16px 10px}
+  .source-modal-head h3{font-size:15px}
+  .source-modal-body{padding:12px 14px 16px}
+}
 
 .category-comparison-table{min-width:1100px}
 

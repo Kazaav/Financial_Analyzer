@@ -22,6 +22,7 @@ class FinancialDocument:
     security_code: str = ""
     edinet_code: str = ""
     metrics: MetricMap = field(default_factory=dict)
+    metric_sources: dict[str, dict[str, Any]] = field(default_factory=dict)
     extraction_notes: list[str] = field(default_factory=list)
     confidence: float = 0.0
 
@@ -44,6 +45,7 @@ class FinancialDocument:
             security_code=str(data.get("security_code", "") or ""),
             edinet_code=str(data.get("edinet_code", "") or ""),
             metrics=data.get("metrics", {}),
+            metric_sources=data.get("metric_sources", {}),
             extraction_notes=data.get("extraction_notes", []),
             confidence=float(data.get("confidence", 0.0)),
         )

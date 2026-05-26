@@ -761,6 +761,61 @@ def metric_charts(rows: list[dict[str, Any]], chart_type: str, metrics: list[dic
     return scatter_charts(rows, metrics)
 
 
+def _format_hint(metric_key: str) -> str:
+    """Return a format hint for client-side number formatting in charts."""
+    if metric_key == "employees":
+        return "people"
+    if metric_key in {"asset_turnover", "current_ratio", "cf_quality", "debt_to_equity"}:
+        return "ratio"
+    if metric_key.endswith("_margin") or metric_key in {"roa", "roe", "equity_ratio", "liability_ratio", "revenue_growth", "net_income_growth"}:
+        return "percent"
+    if metric_key in {"revenue_per_employee", "operating_income_per_employee"}:
+        return "money_per_person"
+    return "money"
+
+
+def build_echarts_payload(chart: dict[str, Any]) -> dict[str, Any]:
+    """Reduce internal chart dict to a JSON payload consumable by ECharts client code."""
+    chart_type = chart["type"]
+    metric_key = chart["key"]
+    fmt = _format_hint(metric_key)
+
+    if chart_type == "line":
+        years = chart["years"]
+        series = []
+        for s in chart["series"]:
+            value_by_year = {p["year"]: p["value"] for p in s["raw_points"]}
+            series.append({
+                "name": s["label"],
+                "data": [value_by_year.get(y) for y in years],
+                "color": s["color"],
+            })
+        return {"type": "line", "format": fmt, "categories": years, "series": series}
+
+    if chart_type == "bar":
+        return {
+            "type": "bar",
+            "format": fmt,
+            "categories": [b.get("label", "") for b in chart["bars"]],
+            "years": [b.get("year") for b in chart["bars"]],
+            "values": [b["value"] for b in chart["bars"]],
+            "colors": [b.get("color", "#6ea8ff") for b in chart["bars"]],
+        }
+
+    if chart_type == "scatter":
+        points = chart["series"][0]["raw_points"] if chart["series"] else []
+        return {
+            "type": "scatter",
+            "format": fmt,
+            "points": [
+                {"label": p["label"], "year": p["year"], "value": p["value"], "color": p["color"]}
+                for p in points
+            ],
+        }
+
+    return {"type": chart_type, "format": fmt}
+
+
 def metric_chart_categories(rows: list[dict[str, Any]], chart_type: str) -> list[dict[str, Any]]:
     categories: list[dict[str, Any]] = []
     for category in METRIC_CATEGORIES:
@@ -772,6 +827,7 @@ def metric_chart_categories(rows: list[dict[str, Any]], chart_type: str) -> list
             chart["panel_key"] = f"{category['key']}-{chart['key']}"
             chart["category_key"] = category["key"]
             chart["category_label"] = category["label"]
+            chart["echarts"] = build_echarts_payload(chart)
         categories.append(
             {
                 "key": category["key"],

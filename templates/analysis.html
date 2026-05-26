@@ -554,67 +554,10 @@
                     </div>
                     <span>{{ chart.subtitle }}</span>
                   </div>
-                  <svg class="trend-svg" viewBox="0 0 300 156" role="img" aria-label="{{ chart.label }}">
-                    <line x1="24" y1="132" x2="276" y2="132" class="axis"></line>
-                    <line x1="24" y1="28"  x2="24"  y2="132" class="axis"></line>
-                    {% for gy in [28,54,80,106,132] %}
-                    <line x1="24" y1="{{ gy }}" x2="276" y2="{{ gy }}" class="grid-line"></line>
-                    {% endfor %}
-                    {% if chart.type == "bar" %}
-                    <line x1="24" y1="{{ chart.baseline }}" x2="276" y2="{{ chart.baseline }}" class="zero-line"></line>
-                    {% for bar in chart.bars %}
-                    <g class="trend-point chart-bar" tabindex="0"
-                       aria-label="{{ bar.label }} {{ bar.year }} {{ bar.value|metric(chart.key) }}"
-                       data-point-tooltip="{{ bar.label }} / {{ bar.year }} / {{ bar.value|metric(chart.key) }}">
-                      <rect class="bar-rect" x="{{ bar.x }}" y="{{ bar.y }}" width="{{ bar.width }}" height="{{ bar.height }}" rx="2.5" fill="{{ bar.color }}"></rect>
-                      <rect x="{{ bar.x - 3 }}" y="26" width="{{ bar.width + 6 }}" height="110" fill="transparent"></rect>
-                      <g class="point-label" transform="translate({{ bar.center_x }},{{ bar.y }})">
-                        <rect x="-62" y="-42" width="124" height="34" rx="6"></rect>
-                        <text class="point-label-year" x="0" y="-28" text-anchor="middle">{{ bar.year }}</text>
-                        <text class="point-label-value" x="0" y="-14" text-anchor="middle">{{ bar.value|metric(chart.key) }}</text>
-                      </g>
-                    </g>
-                    {% endfor %}
-                    {% else %}
-                    {% for series in chart.series %}
-                    {% if chart.type == "line" and series.points %}
-                    <polyline points="{{ series.points }}" fill="none" stroke="{{ series.color }}" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"></polyline>
-                    {% endif %}
-                    {% for point in series.raw_points %}
-                    <g class="trend-point" tabindex="0"
-                       aria-label="{{ point.label or series.label }} {{ point.year }} {{ point.value|metric(chart.key) }}"
-                       data-point-tooltip="{{ point.label or series.label }} / {{ point.year }} / {{ point.value|metric(chart.key) }}">
-                      <circle cx="{{ point.x }}" cy="{{ point.y }}" r="4.4" fill="{{ point.color or series.color }}"></circle>
-                      <circle cx="{{ point.x }}" cy="{{ point.y }}" r="11" fill="transparent"></circle>
-                      <g class="point-label" transform="translate({{ point.x }},{{ point.y }})">
-                        <rect x="-62" y="-42" width="124" height="34" rx="6"></rect>
-                        <text class="point-label-year" x="0" y="-28" text-anchor="middle">{{ point.year }}</text>
-                        <text class="point-label-value" x="0" y="-14" text-anchor="middle">{{ point.value|metric(chart.key) }}</text>
-                      </g>
-                    </g>
-                    {% endfor %}
-                    {% endfor %}
-                    {% endif %}
-                    {% if chart.type == "line" %}
-                    {% for year in chart.years %}
-                    {% set xp = 150 if chart.years|length == 1 else 24 + (loop.index0 / (chart.years|length - 1) * 252) %}
-                    <text x="{{ xp }}" y="150" text-anchor="middle">{{ year }}</text>
-                    {% endfor %}
-                    {% else %}
-                    {% for tick in chart.x_ticks %}
-                    {% if tick.show %}<text x="{{ tick.x }}" y="150" text-anchor="middle">{{ tick.label }}</text>{% endif %}
-                    {% endfor %}
-                    {% endif %}
-                  </svg>
-                  {% if chart.type == "line" %}
-                  <div class="legend compact-legend">
-                    {% for series in chart.series %}
-                    <span class="legend-item"><i style="background:{{ series.color }}"></i>{{ series.label }}</span>
-                    {% endfor %}
-                  </div>
-                  {% elif chart.type == "bar" %}
+                  <div class="echart-host" data-echarts='{{ chart.echarts|tojson }}' aria-label="{{ chart.label }}"></div>
+                  {% if chart.type == "bar" %}
                   <div class="chart-note">バーにカーソルを合わせると企業・年度・値を確認できます。</div>
-                  {% else %}
+                  {% elif chart.type == "scatter" %}
                   <div class="chart-note">各点にカーソルを合わせると詳細を確認できます。</div>
                   {% endif %}
                 </article>
@@ -780,6 +723,8 @@
   </div><!-- /main-area -->
 </div><!-- /app-layout -->
 
+<script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js"></script>
+<script src="/static/chart.js?v=20260526-2"></script>
 <script src="/static/uploader.js?v=20260526-2"></script>
 </body>
 </html>

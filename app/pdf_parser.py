@@ -121,6 +121,23 @@ def is_noise_line(line: str) -> bool:
     return line.startswith("EDINET提出書類") or line == "有価証券報告書"
 
 
+# Lines starting with these are per-share or per-unit derivatives, not the
+# primary aggregate metric. Used to skip e.g. "1株当たり純資産額" when we
+# want "純資産" / "純資産額".
+PER_UNIT_PREFIXES = (
+    "1株当たり", "１株当たり",
+    "基本的1株当たり", "基本的１株当たり",
+    "希薄化後", "希薄化",
+    "潜在株式", "潜在株式調整後",
+    "従業員1人当たり", "1人当たり",
+)
+
+
+def is_per_unit_line(line: str) -> bool:
+    s = line.strip()
+    return any(s.startswith(prefix) for prefix in PER_UNIT_PREFIXES)
+
+
 def looks_numeric_line(line: str) -> bool:
     stripped = line.strip()
     if stripped in {"-", "－"}:
@@ -133,10 +150,32 @@ def looks_numeric_line(line: str) -> bool:
 
 
 def detect_unit(text: str) -> str:
-    head = text[:60000]
-    if "単位:百万円" in head or "単位 百万円" in head or "百万円" in head:
+    """Detect the dominant amount unit for the 主要な経営指標等の推移 table.
+
+    Strategy: the table is at the very beginning of every 有報. We find the
+    FIRST occurrence of "(百万円)" or "(千円)" after the 主要な経営指標 heading.
+    Small companies (e.g. Avant Group) use 千円 throughout; large companies
+    use 百万円. The first marker in the indicators table is authoritative.
+    """
+    head = text[:30000]
+
+    # Locate the indicators section start
+    anchor = re.search(r"主要な経営指標等の推移", head)
+    start = anchor.end() if anchor else 0
+    region = head[start : start + 8000]
+
+    million = re.search(r"[（(]\s*百万円\s*[)）]", region)
+    thousand = re.search(r"[（(]\s*千円\s*[)）]", region)
+
+    if million and thousand:
+        return "百万円" if million.start() < thousand.start() else "千円"
+    if thousand:
+        return "千円"
+    if million:
         return "百万円"
-    if "単位:千円" in head or "単位 千円" in head or "千円" in head:
+
+    # Fallback to legacy whole-document scan
+    if "単位:千円" in head or "単位 千円" in head:
         return "千円"
     if "単位:円" in head or "単位 円" in head:
         return "円"
@@ -303,6 +342,12 @@ def find_section_pages(pages: list[PageText], start: str, end: str | None = None
 
 
 def collect_values_after_label(lines: list[str], index: int, label_parts: list[str], max_scan: int = 14) -> list[float] | None:
+    """Collect numeric values from the lines following a matched label.
+
+    Tolerates label continuation lines (e.g. when "親会社株主に帰属する当期純利益"
+    is split as "親会社株主に帰属する当期" + "純利益") by allowing up to 2 short
+    non-numeric lines before the first value appears.
+    """
     last_label_index = index
     if len(label_parts) > 1:
         for offset in range(0, min(4, len(lines) - index)):
@@ -311,17 +356,26 @@ def collect_values_after_label(lines: list[str], index: int, label_parts: list[s
 
     values: list[float] = []
     saw_content = False
+    continuation_text = 0
     for line in lines[last_label_index + 1 : last_label_index + 1 + max_scan]:
         if is_noise_line(line) or is_unit_line(line):
             continue
         if looks_numeric_line(line):
             saw_content = True
+            continuation_text = 0
             values.extend(numeric_values(line))
             continue
         if values:
             break
         if saw_content:
             break
+        # Non-numeric, non-unit text BEFORE the first value. Likely a label
+        # continuation. Allow up to 2 such lines then give up.
+        if len(line) <= 24:
+            continuation_text += 1
+            if continuation_text > 2:
+                return None
+            continue
         return None
     return values if values else None
 
@@ -338,6 +392,10 @@ def extract_row_from_pages(
     for page in pages:
         lines = page.lines
         for index, line in enumerate(lines):
+            # Skip per-share / per-unit derived rows; they're not the
+            # aggregate metric we're after.
+            if is_per_unit_line(line):
+                continue
             window = "".join(lines[index : min(index + 4, len(lines))])
             if exact_first_line:
                 matched = line == label_parts[0]
@@ -356,50 +414,152 @@ def extract_row_from_pages(
     return candidates[-1] if prefer_last else candidates[0]
 
 
+# IFRS / JGAAP synonyms for major indicators (連結経営指標等の推移)
+# Order matters: try IFRS labels FIRST (preferred for companies that adopted IFRS),
+# then JGAAP. Stop at first match. This ensures IFRS-primary companies (e.g. 野村総合研究所
+# 2022年以降) get values from 売上収益 column, not historical 売上高 column.
+MAJOR_SPECS: dict[str, list[tuple[list[str], str]]] = {
+    "revenue": [
+        (["売上収益"], "売上収益（IFRS）"),
+        (["営業収益"], "営業収益"),
+        (["売上高"], "売上高"),
+    ],
+    "operating_income": [
+        (["営業利益"], "営業利益"),
+    ],
+    "ordinary_income": [
+        (["税引前利益"], "税引前利益（IFRS）"),
+        (["税引前当期利益"], "税引前当期利益（IFRS）"),
+        (["経常利益"], "経常利益"),
+    ],
+    "net_income": [
+        (["親会社の所有者に帰属する", "当期利益"], "親会社の所有者に帰属する当期利益（IFRS）"),
+        (["親会社株主に帰属する", "当期純利益"], "親会社株主に帰属する当期純利益"),
+        (["当期純利益"], "当期純利益"),
+    ],
+    "net_assets": [
+        (["親会社の所有者に帰属する持分合計"], "親会社の所有者に帰属する持分合計（IFRS）"),
+        (["親会社の所有者に帰属する", "持分"], "親会社の所有者に帰属する持分（IFRS）"),
+        (["資本合計"], "資本合計（IFRS）"),
+        (["純資産額"], "純資産額"),
+        (["純資産"], "純資産"),
+    ],
+    "total_assets": [
+        (["資産合計"], "資産合計"),
+        (["総資産額"], "総資産額"),
+        (["総資産"], "総資産"),
+    ],
+    "operating_cash_flow": [
+        (["営業活動による", "キャッシュ・フロー"], "営業活動によるキャッシュ・フロー"),
+    ],
+    "investing_cash_flow": [
+        (["投資活動による", "キャッシュ・フロー"], "投資活動によるキャッシュ・フロー"),
+    ],
+    "financing_cash_flow": [
+        (["財務活動による", "キャッシュ・フロー"], "財務活動によるキャッシュ・フロー"),
+    ],
+    "employees": [
+        (["従業員数"], "従業員数"),
+    ],
+}
+
+
+def find_first_section(pages: list[PageText], starts: list[str], ends: list[str] | None, window: int = 4) -> list[PageText]:
+    """Try multiple section start/end heading combinations; return first non-empty match."""
+    for start in starts:
+        end_candidates = ends if ends else [None]
+        for end in end_candidates:
+            sec = find_section_pages(pages, start, end, window=window)
+            if sec:
+                return sec
+    return []
+
+
 def extract_metrics_from_major_indicators(pages: list[PageText]) -> dict[str, ExtractedValue]:
+    # The 連結 indicators section. Search includes both the IFRS table and the JGAAP
+    # historical table (both are 連結, not 提出会社). The synonym list controls which
+    # accounting standard's value is preferred when both are present.
     section_pages = find_section_pages(pages, "連結経営指標等", "(2) 提出会社", window=3)
     source = "主要な経営指標等の推移"
-    specs = {
-        "revenue": (["売上高"], "売上高"),
-        "ordinary_income": (["経常利益"], "経常利益"),
-        "net_income": (["親会社株主に帰属する", "当期純利益"], "親会社株主に帰属する当期純利益"),
-        "net_assets": (["純資産額"], "純資産額"),
-        "total_assets": (["総資産額"], "総資産額"),
-        "operating_cash_flow": (["営業活動による", "キャッシュ・フロー"], "営業活動によるキャッシュ・フロー"),
-        "investing_cash_flow": (["投資活動による", "キャッシュ・フロー"], "投資活動によるキャッシュ・フロー"),
-        "financing_cash_flow": (["財務活動による", "キャッシュ・フロー"], "財務活動によるキャッシュ・フロー"),
-        "employees": (["従業員数"], "従業員数"),
-    }
-    return {
-        key: value
-        for key, (parts, label) in specs.items()
-        if (value := extract_row_from_pages(section_pages, parts, label, source)) is not None
-    }
+    extracted: dict[str, ExtractedValue] = {}
+    for key, alternatives in MAJOR_SPECS.items():
+        for parts, label in alternatives:
+            value = extract_row_from_pages(section_pages, parts, label, source)
+            if value is not None:
+                extracted[key] = value
+                break
+    return extracted
 
 
 def extract_metrics_from_statements(pages: list[PageText]) -> dict[str, ExtractedValue]:
-    bs_pages = find_section_pages(pages, "連結貸借対照表", "連結損益計算書", window=4)
-    pl_pages = find_section_pages(pages, "連結損益計算書", "連結包括利益計算書", window=3)
-    cf_pages = find_section_pages(pages, "連結キャッシュ・フロー計算書", "注記事項", window=4)
-    specs: list[tuple[str, list[PageText], list[str], str, str, bool, bool]] = [
-        ("current_assets", bs_pages, ["流動資産合計"], "流動資産合計", "連結貸借対照表", True, False),
-        ("total_assets", bs_pages, ["資産合計"], "資産合計", "連結貸借対照表", True, False),
-        ("current_liabilities", bs_pages, ["流動負債合計"], "流動負債合計", "連結貸借対照表", True, False),
-        ("net_assets", bs_pages, ["純資産合計"], "純資産合計", "連結貸借対照表", True, False),
-        ("revenue", pl_pages, ["売上高"], "売上高", "連結損益計算書", True, False),
-        ("gross_profit", pl_pages, ["売上総利益"], "売上総利益", "連結損益計算書", True, False),
-        ("operating_income", pl_pages, ["営業利益"], "営業利益", "連結損益計算書", True, False),
-        ("ordinary_income", pl_pages, ["経常利益"], "経常利益", "連結損益計算書", True, False),
-        ("net_income", pl_pages, ["親会社株主に帰属する当期純利益"], "親会社株主に帰属する当期純利益", "連結損益計算書", True, False),
-        ("operating_cash_flow", cf_pages, ["営業活動によるキャッシュ・フロー"], "営業活動によるキャッシュ・フロー", "連結キャッシュ・フロー計算書", True, True),
-        ("investing_cash_flow", cf_pages, ["投資活動によるキャッシュ・フロー"], "投資活動によるキャッシュ・フロー", "連結キャッシュ・フロー計算書", True, True),
-        ("financing_cash_flow", cf_pages, ["財務活動によるキャッシュ・フロー"], "財務活動によるキャッシュ・フロー", "連結キャッシュ・フロー計算書", True, True),
-    ]
+    # Balance sheet: 連結貸借対照表 (JGAAP) or 連結財政状態計算書 (IFRS)
+    bs_pages = find_first_section(
+        pages,
+        ["連結財政状態計算書", "連結貸借対照表"],
+        ["連結損益計算書", "連結損益及び包括利益計算書", "連結包括利益計算書"],
+        window=4,
+    )
+    # P/L: 連結損益計算書 (JGAAP) or 連結損益及び包括利益計算書 (IFRS combined)
+    pl_pages = find_first_section(
+        pages,
+        ["連結損益及び包括利益計算書", "連結損益計算書"],
+        ["連結包括利益計算書", "連結キャッシュ・フロー計算書", "連結株主資本等変動計算書"],
+        window=4,
+    )
+    cf_pages = find_first_section(
+        pages,
+        ["連結キャッシュ・フロー計算書", "連結キャッシュ・フロー"],
+        ["注記事項", "連結附属明細表"],
+        window=4,
+    )
+
+    # Each metric: list of (parts, label) alternatives. First match wins.
+    bs_specs: dict[str, list[tuple[list[str], str]]] = {
+        "current_assets": [(["流動資産合計"], "流動資産合計")],
+        "total_assets": [(["資産合計"], "資産合計")],
+        "current_liabilities": [(["流動負債合計"], "流動負債合計")],
+        "net_assets": [
+            (["資本合計"], "資本合計（IFRS）"),
+            (["純資産合計"], "純資産合計"),
+        ],
+    }
+    pl_specs: dict[str, list[tuple[list[str], str]]] = {
+        "revenue": [
+            (["売上収益"], "売上収益（IFRS）"),
+            (["営業収益"], "営業収益"),
+            (["売上高"], "売上高"),
+        ],
+        "gross_profit": [(["売上総利益"], "売上総利益")],
+        "operating_income": [(["営業利益"], "営業利益")],
+        "ordinary_income": [
+            (["税引前利益"], "税引前利益（IFRS）"),
+            (["税引前当期利益"], "税引前当期利益（IFRS）"),
+            (["経常利益"], "経常利益"),
+        ],
+        "net_income": [
+            (["親会社の所有者に帰属する当期利益"], "親会社の所有者に帰属する当期利益（IFRS）"),
+            (["親会社株主に帰属する当期純利益"], "親会社株主に帰属する当期純利益"),
+        ],
+    }
+    cf_specs: dict[str, list[tuple[list[str], str]]] = {
+        "operating_cash_flow": [(["営業活動によるキャッシュ・フロー"], "営業活動によるキャッシュ・フロー")],
+        "investing_cash_flow": [(["投資活動によるキャッシュ・フロー"], "投資活動によるキャッシュ・フロー")],
+        "financing_cash_flow": [(["財務活動によるキャッシュ・フロー"], "財務活動によるキャッシュ・フロー")],
+    }
+
     extracted: dict[str, ExtractedValue] = {}
-    for key, section, parts, label, source, exact, prefer_last in specs:
-        value = extract_row_from_pages(section, parts, label, source, exact_first_line=exact, prefer_last=prefer_last)
-        if value is not None:
-            extracted[key] = value
+
+    def _apply(specs: dict[str, list[tuple[list[str], str]]], section: list[PageText], source: str, prefer_last: bool = False) -> None:
+        for key, alternatives in specs.items():
+            for parts, label in alternatives:
+                value = extract_row_from_pages(section, parts, label, source, exact_first_line=True, prefer_last=prefer_last)
+                if value is not None:
+                    extracted[key] = value
+                    break
+
+    _apply(bs_specs, bs_pages, "連結貸借対照表/連結財政状態計算書")
+    _apply(pl_specs, pl_pages, "連結損益計算書")
+    _apply(cf_specs, cf_pages, "連結キャッシュ・フロー計算書", prefer_last=True)
     return extracted
 
 
@@ -409,10 +569,18 @@ def extract_metrics(pages: list[PageText], default_unit: str) -> tuple[dict[str,
     metrics: dict[str, float | None] = {key: None for key in DISPLAY_NAMES}
     notes: list[str] = []
 
+    # 主要な経営指標等の推移 (MAJOR) is more robust for trend-table metrics:
+    # values are always rightmost = current year, and the format is uniform across
+    # JGAAP/IFRS PDFs. STATEMENTS detail is preferred only for sub-items not in MAJOR.
+    PREFER_MAJOR = {
+        "revenue", "ordinary_income", "net_income", "total_assets", "net_assets",
+        "operating_cash_flow", "investing_cash_flow", "financing_cash_flow", "employees",
+    }
     for key in DISPLAY_NAMES:
-        picked = statements.get(key) or major.get(key)
-        if key in {"operating_cash_flow", "investing_cash_flow", "financing_cash_flow", "employees"}:
+        if key in PREFER_MAJOR:
             picked = major.get(key) or statements.get(key)
+        else:
+            picked = statements.get(key) or major.get(key)
         if picked is None:
             continue
         metrics[key] = unit_to_million_yen(picked.value, default_unit, key)

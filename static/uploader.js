@@ -356,6 +356,29 @@
     return String(str).replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&quot;");
   }
 
+  /* ── Sidebar drawer toggle (mobile) ───────────────────────────── */
+  function initSidebarDrawer() {
+    var toggle = document.querySelector("[data-sidebar-toggle]");
+    if (!toggle) return;
+    var body = document.body;
+    toggle.addEventListener("click", function (e) {
+      e.stopPropagation();
+      body.classList.toggle("sidebar-open");
+    });
+    // Tap outside to close
+    document.addEventListener("click", function (e) {
+      if (!body.classList.contains("sidebar-open")) return;
+      var sidebar = document.querySelector(".sidebar");
+      if (sidebar && !sidebar.contains(e.target) && e.target !== toggle) {
+        body.classList.remove("sidebar-open");
+      }
+    });
+    // ESC closes
+    document.addEventListener("keydown", function (e) {
+      if (e.key === "Escape") body.classList.remove("sidebar-open");
+    });
+  }
+
   /* ── Init ─────────────────────────────────────────────────────── */
   document.querySelectorAll("[data-upload-queue]").forEach(initUploader);
   document.querySelectorAll("[data-delete-form]").forEach(initDeleteForm);
@@ -366,4 +389,5 @@
   initTrendTooltips();
   initTabs();
   initSidebarForm();
+  initSidebarDrawer();
 })();

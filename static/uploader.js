@@ -289,21 +289,14 @@
     }
 
     // Event delegation on the nav so clicks always reach this handler
-    // regardless of init order / re-renders / missing per-button listeners.
+    // regardless of init order, re-renders, or missing per-button listeners.
     nav.addEventListener("click", function (e) {
       var btn = e.target.closest("[data-tab-target]");
       if (!btn || !nav.contains(btn)) return;
       e.preventDefault();
-      // Defensive: ensure body scroll/overflow is unlocked (in case a modal
-      // left it stuck) so sticky positioning works correctly.
-      document.body.style.overflow = "";
-      var modal = document.querySelector("[data-source-modal]");
-      if (modal && !modal.hasAttribute("hidden")) modal.setAttribute("hidden", "");
       activate(btn.dataset.tabTarget, true);
-      // Scroll the main-area (or window on mobile) to top so the freshly
-      // activated tab starts at the top, with main-top + tab-nav fully visible.
-      var mainArea = document.querySelector(".main-area");
-      if (mainArea && mainArea.scrollTo) mainArea.scrollTo({ top: 0, behavior: "auto" });
+      // Bring sticky header back into view if user had scrolled deep into the
+      // previous tab. With body-scroll layout this just works.
       window.scrollTo({ top: 0, behavior: "auto" });
     });
 

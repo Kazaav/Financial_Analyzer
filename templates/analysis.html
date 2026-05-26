@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/static/styles.css?v=20260526-5">
+  <link rel="stylesheet" href="/static/styles.css?v=20260527-1">
 </head>
 <body>
 {% macro info(key) -%}
@@ -207,48 +207,65 @@
        ══════════════════════════════════════════════════════════════ -->
   <div class="main-area">
 
-    <!-- Sticky top bar -->
-    <header class="main-top">
-      <button class="sidebar-toggle" type="button" aria-label="サイドバーを開く" data-sidebar-toggle>
-        <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 5h12M3 9h12M3 13h12"/></svg>
-      </button>
-      <div class="main-top-left">
-        <span class="mode-badge">{{ analysis.mode_label }}</span>
-        <div class="current-selection">
-          {% if analysis.mode == "same_year" %}
-            <span class="selection-label">対象年度</span>
-            <span class="selection-value">{{ analysis.selected_year or analysis.kpis.year_range }}年度</span>
-          {% elif analysis.mode == "same_company" %}
-            <span class="selection-label">対象企業</span>
-            <span class="selection-value">{% for row in analysis.rows[:1] %}{{ row.company_name }}{% endfor %}</span>
-            <span class="selection-period">{{ analysis.kpis.year_range }}</span>
-          {% else %}
-            <span class="selection-label">選択</span>
-            <span class="selection-value">{{ analysis.kpis.document_count }} PDF · {{ analysis.kpis.company_count }} 企業</span>
+    <!-- Single sticky header: main-top + demo-banner + tab-nav all in one block.
+         Using one sticky wrapper avoids the nested-sticky issues that broke
+         tab-nav when switching tabs. -->
+    <div class="main-header" data-main-header>
+      <header class="main-top">
+        <button class="sidebar-toggle" type="button" aria-label="サイドバーを開く" data-sidebar-toggle>
+          <svg width="18" height="18" viewBox="0 0 18 18" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 5h12M3 9h12M3 13h12"/></svg>
+        </button>
+        <div class="main-top-left">
+          <span class="mode-badge">{{ analysis.mode_label }}</span>
+          <div class="current-selection">
+            {% if analysis.mode == "same_year" %}
+              <span class="selection-label">対象年度</span>
+              <span class="selection-value">{{ analysis.selected_year or analysis.kpis.year_range }}年度</span>
+            {% elif analysis.mode == "same_company" %}
+              <span class="selection-label">対象企業</span>
+              <span class="selection-value">{% for row in analysis.rows[:1] %}{{ row.company_name }}{% endfor %}</span>
+              <span class="selection-period">{{ analysis.kpis.year_range }}</span>
+            {% else %}
+              <span class="selection-label">選択</span>
+              <span class="selection-value">{{ analysis.kpis.document_count }} PDF · {{ analysis.kpis.company_count }} 企業</span>
+            {% endif %}
+          </div>
+        </div>
+        <div class="main-top-right">
+          <div class="top-stat-bar">
+            <span class="stat-chip">{{ analysis.kpis.document_count }} <small>PDF</small></span>
+            <span class="stat-chip">信頼度 {{ (analysis.kpis.avg_confidence * 100)|number }}%</span>
+          </div>
+          {% if current_user %}
+          <span class="user-chip">{{ current_user.username }}</span>
+          {% elif is_demo %}
+          <span class="user-chip">DEMO · 読み取り専用</span>
           {% endif %}
         </div>
-      </div>
-      <div class="main-top-right">
-        <div class="top-stat-bar">
-          <span class="stat-chip">{{ analysis.kpis.document_count }} <small>PDF</small></span>
-          <span class="stat-chip">信頼度 {{ (analysis.kpis.avg_confidence * 100)|number }}%</span>
-        </div>
-        {% if current_user %}
-        <span class="user-chip">{{ current_user.username }}</span>
-        {% elif is_demo %}
-        <span class="user-chip">DEMO · 読み取り専用</span>
-        {% endif %}
-      </div>
-    </header>
+      </header>
 
-    {% if is_demo and demo_meta %}
-    <div class="demo-banner">
-      <span class="demo-banner-dot"></span>
-      <span class="demo-banner-title">{{ demo_meta.title }}</span>
-      <span class="demo-banner-sub">{{ demo_meta.subtitle }}</span>
-      <a class="demo-banner-link" href="/">他のサンプル →</a>
-    </div>
-    {% endif %}
+      {% if is_demo and demo_meta %}
+      <div class="demo-banner">
+        <span class="demo-banner-dot"></span>
+        <span class="demo-banner-title">{{ demo_meta.title }}</span>
+        <span class="demo-banner-sub">{{ demo_meta.subtitle }}</span>
+        <a class="demo-banner-link" href="/">他のサンプル →</a>
+      </div>
+      {% endif %}
+
+      <!-- Tab nav lives inside the sticky header so it scrolls together. -->
+      <nav class="tab-nav" data-tab-nav>
+        <button class="tab-btn is-active" type="button" data-tab-target="overview">概要</button>
+        <button class="tab-btn" type="button" data-tab-target="metrics">指標比較</button>
+        <button class="tab-btn" type="button" data-tab-target="charts">チャート</button>
+        {% if not is_demo %}
+        <button class="tab-btn" type="button" data-tab-target="manage">
+          管理 <span class="tab-badge">{{ analysis.record.documents|length }}</span>
+        </button>
+        {% endif %}
+      </nav>
+    </div><!-- /.main-header -->
+
 
     <!-- Flash notices -->
     {% if report_file %}
@@ -271,18 +288,6 @@
       <div class="notice warn">{{ deleted }}件のPDFを削除しました。</div>
     </div>
     {% endif %}
-
-    <!-- Tab nav -->
-    <nav class="tab-nav" data-tab-nav>
-      <button class="tab-btn is-active" type="button" data-tab-target="overview">概要</button>
-      <button class="tab-btn" type="button" data-tab-target="metrics">指標比較</button>
-      <button class="tab-btn" type="button" data-tab-target="charts">チャート</button>
-      {% if not is_demo %}
-      <button class="tab-btn" type="button" data-tab-target="manage">
-        管理 <span class="tab-badge">{{ analysis.record.documents|length }}</span>
-      </button>
-      {% endif %}
-    </nav>
 
     <!-- ── Tab: 概要 ─────────────────────────────────────────── -->
     <div class="tab-panel" data-tab-panel="overview">
@@ -779,7 +784,7 @@
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js"></script>
-<script src="/static/chart.js?v=20260526-5"></script>
-<script src="/static/uploader.js?v=20260526-5"></script>
+<script src="/static/chart.js?v=20260527-1"></script>
+<script src="/static/uploader.js?v=20260527-1"></script>
 </body>
 </html>

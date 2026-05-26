@@ -265,10 +265,11 @@
   function initTabs() {
     var nav = document.querySelector("[data-tab-nav]");
     if (!nav) return;
-    var buttons = Array.from(nav.querySelectorAll("[data-tab-target]"));
-    var panels  = Array.from(document.querySelectorAll("[data-tab-panel]"));
 
     function activate(target, pushHash) {
+      // Re-query each time so dynamically added/removed elements are not stale.
+      var buttons = nav.querySelectorAll("[data-tab-target]");
+      var panels  = document.querySelectorAll("[data-tab-panel]");
       buttons.forEach(function (b) {
         var active = b.dataset.tabTarget === target;
         b.classList.toggle("is-active", active);
@@ -276,23 +277,39 @@
       });
       panels.forEach(function (p) {
         var active = p.dataset.tabPanel === target;
-        p.hidden = !active;
+        if (active) {
+          p.removeAttribute("hidden");
+        } else {
+          p.setAttribute("hidden", "");
+        }
       });
       if (pushHash && history.replaceState) {
         history.replaceState(null, "", "#tab-" + target);
       }
     }
 
-    buttons.forEach(function (b) {
-      b.addEventListener("click", function () { activate(b.dataset.tabTarget, true); });
+    // Event delegation on the nav so clicks always reach this handler
+    // regardless of init order / re-renders / missing per-button listeners.
+    nav.addEventListener("click", function (e) {
+      var btn = e.target.closest("[data-tab-target]");
+      if (!btn || !nav.contains(btn)) return;
+      e.preventDefault();
+      activate(btn.dataset.tabTarget, true);
     });
 
     // Restore from hash
     var hash = window.location.hash.replace("#tab-", "");
-    var initial = buttons.find(function (b) { return b.dataset.tabTarget === hash; })
-                || buttons.find(function (b) { return b.classList.contains("is-active"); })
-                || buttons[0];
-    if (initial) activate(initial.dataset.tabTarget, false);
+    var firstBtn = nav.querySelector("[data-tab-target]");
+    var initialTarget = null;
+    nav.querySelectorAll("[data-tab-target]").forEach(function (b) {
+      if (b.dataset.tabTarget === hash) initialTarget = hash;
+    });
+    if (!initialTarget) {
+      var activeBtn = nav.querySelector(".tab-btn.is-active[data-tab-target]");
+      initialTarget = (activeBtn && activeBtn.dataset.tabTarget)
+                   || (firstBtn && firstBtn.dataset.tabTarget);
+    }
+    if (initialTarget) activate(initialTarget, false);
 
     // If there's a flash notice (report generated, PDF added etc.) and we're
     // on default tab, that's fine. But if URL says manage, go there.

@@ -69,17 +69,28 @@ DEMO_REGISTRY: dict[str, dict] = {
 }
 
 
+def _path_is_public(path: str) -> bool:
+    if path in ROOT_PUBLIC_PATHS or path.startswith(PUBLIC_PATHS):
+        return True
+    # /analysis/demo-... (demo records) are publicly viewable so the sidebar's
+    # form action (which always points to /analysis/{record_id}) keeps working
+    # when an unauthenticated visitor changes mode / filters within a demo.
+    if path.startswith("/analysis/demo-"):
+        return True
+    return False
+
+
 @app.middleware("http")
 async def auth_and_cleanup_middleware(request: Request, call_next):
     maybe_cleanup_expired_storage()
     path = request.url.path
-    if path in ROOT_PUBLIC_PATHS or path.startswith(PUBLIC_PATHS):
+    # Always populate request.state.user so handlers can use it on either
+    # public (demo) or authenticated routes; None for unauthenticated visitors.
+    request.state.user = read_session_user(request)
+    if _path_is_public(path):
         return await call_next(request)
-
-    user = read_session_user(request)
-    if not user:
+    if not request.state.user:
         return login_redirect(request)
-    request.state.user = user
     return await call_next(request)
 
 

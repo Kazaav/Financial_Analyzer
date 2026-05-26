@@ -139,6 +139,16 @@ def is_per_unit_line(line: str) -> bool:
     return any(s.startswith(prefix) for prefix in PER_UNIT_PREFIXES)
 
 
+# A "parenthesized annotation" is a line whose ONLY content is (N) — typically
+# 「外、X名」style sub-totals next to 従業員数. Distinguished from △N
+# (proper financial negative numbers), which we must keep collecting (e.g. CF).
+PAREN_ANNOTATION_RE = re.compile(r"^[（(]\s*\d[\d,]*(?:\.\d+)?\s*[)）]$")
+
+
+def is_parenthesized_annotation(line: str) -> bool:
+    return bool(PAREN_ANNOTATION_RE.match(line.strip()))
+
+
 def looks_numeric_line(line: str) -> bool:
     stripped = line.strip()
     if stripped in {"-", "－"}:
@@ -358,23 +368,20 @@ def collect_values_after_label(lines: list[str], index: int, label_parts: list[s
     values: list[float] = []
     saw_content = False
     continuation_text = 0
-    seen_positive = False
     for line in lines[last_label_index + 1 : last_label_index + 1 + max_scan]:
         if is_noise_line(line) or is_unit_line(line):
             continue
         if looks_numeric_line(line):
+            # Annotation sub-row detection: once we've collected primary values,
+            # any *parenthesized* (N)-style line (not △N) is a sub-annotation
+            # row (typical 「外、平均臨時従業員数」 below 従業員数). Stop here.
+            # △N is a proper financial negative and must keep being collected
+            # (e.g. 財務CF △21,948).
+            if values and is_parenthesized_annotation(line):
+                break
             saw_content = True
             continuation_text = 0
-            new_vals = numeric_values(line)
-            # Heuristic: if we've previously collected positive values and now
-            # encounter a row of all-negative parenthesized numbers, treat that
-            # as a transition to an annotation sub-row (e.g. 「外、平均臨時従業員数」
-            # for 従業員数). Stop collecting so we keep the main row's values.
-            if seen_positive and new_vals and all(v < 0 for v in new_vals):
-                break
-            if any(v > 0 for v in new_vals):
-                seen_positive = True
-            values.extend(new_vals)
+            values.extend(numeric_values(line))
             continue
         if values:
             break

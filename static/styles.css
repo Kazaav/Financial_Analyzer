@@ -500,7 +500,7 @@ input[type="radio"]{accent-color:var(--accent)}
 .main-area{flex:1;min-width:0;height:100vh;overflow-y:auto;display:flex;flex-direction:column;background:var(--bg-base)}
 
 .main-top{
-  position:sticky;top:0;z-index:20;
+  position:sticky;top:0;z-index:30;
   display:flex;align-items:center;justify-content:space-between;gap:16px;
   padding:10px 24px;background:var(--bg-elev-1);border-bottom:1px solid var(--bd);
 }
@@ -554,8 +554,10 @@ input[type="radio"]{accent-color:var(--accent)}
 .tab-nav{
   display:flex;padding:0 24px;
   background:var(--bg-elev-1);border-bottom:1px solid var(--bd);
-  position:sticky;top:53px;z-index:19;overflow-x:auto;
+  position:sticky;top:53px;z-index:29;overflow-x:auto;
 }
+/* Main area must not be a horizontal-scroll context — keeps sticky nav stable */
+.main-area{overflow-x:hidden}
 .tab-btn{
   display:inline-flex;align-items:center;gap:6px;
   padding:10px 14px;min-height:42px;

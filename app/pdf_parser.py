@@ -358,13 +358,23 @@ def collect_values_after_label(lines: list[str], index: int, label_parts: list[s
     values: list[float] = []
     saw_content = False
     continuation_text = 0
+    seen_positive = False
     for line in lines[last_label_index + 1 : last_label_index + 1 + max_scan]:
         if is_noise_line(line) or is_unit_line(line):
             continue
         if looks_numeric_line(line):
             saw_content = True
             continuation_text = 0
-            values.extend(numeric_values(line))
+            new_vals = numeric_values(line)
+            # Heuristic: if we've previously collected positive values and now
+            # encounter a row of all-negative parenthesized numbers, treat that
+            # as a transition to an annotation sub-row (e.g. 「外、平均臨時従業員数」
+            # for 従業員数). Stop collecting so we keep the main row's values.
+            if seen_positive and new_vals and all(v < 0 for v in new_vals):
+                break
+            if any(v > 0 for v in new_vals):
+                seen_positive = True
+            values.extend(new_vals)
             continue
         if values:
             break

@@ -1,0 +1,97 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>有報分析プラットフォーム</title>
+  <link rel="stylesheet" href="/static/styles.css?v=20260515-16">
+</head>
+<body>
+<div class="home-wrap">
+
+  <header class="top-nav">
+    <div class="top-nav-brand">
+      <h1>有価証券報告書 分析プラットフォーム</h1>
+      <p>PDFから財務データを抽出・比較・可視化</p>
+    </div>
+    <div class="top-nav-actions">
+      <span class="user-chip">{{ current_user.username }} / {{ current_user.role }}</span>
+      <a class="button ghost" href="/logout">ログアウト</a>
+    </div>
+  </header>
+
+  <div class="home-grid">
+
+    <!-- Upload card -->
+    <div class="upload-card" data-upload-queue>
+      <div class="upload-card-head">
+        <h2>PDFをアップロードして分析を開始</h2>
+        <p>複数ファイル・複数フォルダから繰り返し選択できます。ドラッグ＆ドロップも対応。</p>
+      </div>
+
+      <form action="/upload" method="post" enctype="multipart/form-data">
+        <input class="file-input-native" type="file" name="files" accept="application/pdf,.pdf" multiple data-file-input>
+
+        <div class="upload-zone" data-drop-zone>
+          <div class="upload-trigger-row">
+            <button type="button" class="upload-trigger-btn" data-choose-files>+ PDFを選択</button>
+            <span class="upload-trigger-hint">またはここにドラッグ＆ドロップ</span>
+          </div>
+          <div class="queue-empty-hint" data-empty-state>
+            <span>選択されたファイルはここに表示されます</span>
+          </div>
+          <ul class="queue-list" data-file-list></ul>
+        </div>
+
+        <div class="upload-footer">
+          <span class="upload-count-label"><strong data-file-count>0</strong> ファイル選択中</span>
+          <div class="upload-footer-actions">
+            <button type="button" class="button ghost" data-clear-files>クリア</button>
+            <button type="submit" class="button primary" disabled>解析を開始 →</button>
+          </div>
+        </div>
+      </form>
+    </div>
+
+    <!-- Feature list -->
+    <div class="feature-grid panel" style="border-radius:12px;overflow:hidden">
+      <div class="feature">
+        <strong>抽出対象</strong>
+        <p class="muted">売上高・各利益・総資産・純資産・CF・従業員数など13指標を自動抽出します。</p>
+      </div>
+      <div class="feature">
+        <strong>抽出根拠</strong>
+        <p class="muted">各指標に参照した有報セクションとページ番号を記録し、確認・補正ができます。</p>
+      </div>
+      <div class="feature">
+        <strong>3つの比較モード</strong>
+        <p class="muted">多社同年度・同一企業時系列・カスタム選択。企業識別は証券コードとEDINETを自動統合。</p>
+      </div>
+      <div class="feature">
+        <strong>レポート出力</strong>
+        <p class="muted">指標比較・チャート・ランキングをCSS埋め込みのスタンドアローンHTMLとして出力できます。</p>
+      </div>
+    </div>
+
+  </div>
+
+  {% if recent_records %}
+  <div>
+    <div class="home-section-label">
+      <h2>最近の分析セッション</h2>
+    </div>
+    <div class="recent-list">
+      {% for item in recent_records %}
+      <a class="recent-item" href="/analysis/{{ item.id }}">
+        <strong>{{ item.created_at }}</strong>
+        <div class="subline"><span>{{ item.count }} PDF</span><span>{{ item.id }}</span></div>
+      </a>
+      {% endfor %}
+    </div>
+  </div>
+  {% endif %}
+
+</div>
+<script src="/static/uploader.js?v=20260515-16"></script>
+</body>
+</html>

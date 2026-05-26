@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ログイン — 有報分析プラットフォーム</title>
+  <link rel="stylesheet" href="/static/styles.css?v=20260515-16">
+</head>
+<body>
+
+<div class="login-shell">
+  <div class="login-panel panel">
+
+    <div class="login-brand-block">
+      <svg class="login-logo-svg" viewBox="0 0 36 36" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" width="36" height="36">
+        <rect width="36" height="36" rx="9" fill="var(--cp)"/>
+        <rect x="8" y="11" width="12" height="2" rx="1" fill="white"/>
+        <rect x="8" y="16" width="20" height="2" rx="1" fill="white"/>
+        <rect x="8" y="21" width="16" height="2" rx="1" fill="white"/>
+      </svg>
+      <div>
+        <p class="eyebrow">有価証券報告書 分析プラットフォーム</p>
+        <h1 class="brand">ログイン</h1>
+      </div>
+    </div>
+
+    {% if error %}
+    <div class="notice warn login-error" role="alert">{{ error }}</div>
+    {% endif %}
+
+    <form class="login-form" action="/login" method="post">
+      <div class="field">
+        <label for="username">ユーザー名</label>
+        <input type="text" id="username" name="username"
+               autocomplete="username" autocapitalize="off" spellcheck="false"
+               required autofocus>
+      </div>
+      <div class="field">
+        <label for="password">パスワード</label>
+        <input type="password" id="password" name="password"
+               autocomplete="current-password" required>
+      </div>
+      <button class="button primary login-button" type="submit">ログイン</button>
+    </form>
+
+  </div>
+</div>
+
+</body>
+</html>

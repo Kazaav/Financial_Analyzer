@@ -1,0 +1,731 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{{ analysis.mode_label }} - 有報分析</title>
+  <link rel="stylesheet" href="/static/styles.css?v=20260515-16">
+</head>
+<body>
+{% macro info(key) -%}
+  {% if analysis.formulas.get(key) %}
+  <span class="info-dot" tabindex="0" aria-label="計算式" data-info-tooltip="{{ analysis.formulas.get(key) }}">i</span>
+  {% endif %}
+{%- endmacro %}
+
+{% macro entity(row) -%}
+  <span class="entity-code">{{ row.display_code }}</span>
+  <span class="entity-name">{{ row.company_name }}</span>
+  <span class="entity-year">{{ row.fiscal_year or "年度不明" }}</span>
+{%- endmacro %}
+
+{% macro metric_display(row, metric_def) -%}
+  {% if metric_def.source == "growth" %}{{ row.growth.get(metric_def.key)|metric(metric_def.key) }}
+  {% elif metric_def.source == "derived" %}{{ row.derived.get(metric_def.key)|metric(metric_def.key) }}
+  {% else %}{{ row.metrics.get(metric_def.key)|metric(metric_def.key) }}
+  {% endif %}
+{%- endmacro %}
+
+<div class="app-layout">
+
+  <!-- ══════════════════════════════════════════════════════════════
+       SIDEBAR
+       ══════════════════════════════════════════════════════════════ -->
+  <aside class="sidebar">
+    <div class="sidebar-top">
+      <span class="sidebar-brand">有報分析</span>
+      <a class="sidebar-back" href="/">← 新規</a>
+    </div>
+
+    <!-- Mode + filter form -->
+    <form class="sidebar-mode-form mode-is-{{ analysis.mode }}" method="get"
+          action="/analysis/{{ analysis.record.id }}"
+          data-sidebar-form data-doc-selection-form>
+
+      <!-- Hidden mode value — driven by segmented control buttons -->
+      <input type="hidden" name="mode" value="{{ analysis.mode }}" data-mode-value>
+
+      <!-- Segmented mode control -->
+      <div class="sidebar-sec">
+        <div class="sidebar-sec-label">分析モード</div>
+        <div class="mode-seg" role="tablist" aria-label="分析モード">
+          <button class="mode-seg-btn {% if analysis.mode == 'same_year' %}is-active{% endif %}"
+                  type="button" role="tab"
+                  aria-selected="{{ 'true' if analysis.mode == 'same_year' else 'false' }}"
+                  data-mode-btn="same_year">
+            多社<br>同年度
+            <span class="mode-seg-sub">横比較</span>
+          </button>
+          <button class="mode-seg-btn {% if analysis.mode == 'same_company' %}is-active{% endif %}"
+                  type="button" role="tab"
+                  aria-selected="{{ 'true' if analysis.mode == 'same_company' else 'false' }}"
+                  data-mode-btn="same_company">
+            同一企業<br>時系列
+            <span class="mode-seg-sub">推移</span>
+          </button>
+          <button class="mode-seg-btn {% if analysis.mode == 'custom' %}is-active{% endif %}"
+                  type="button" role="tab"
+                  aria-selected="{{ 'true' if analysis.mode == 'custom' else 'false' }}"
+                  data-mode-btn="custom">
+            カスタム
+            <span class="mode-seg-sub">自由選択</span>
+          </button>
+        </div>
+      </div>
+
+      <!-- Mode-dependent filters -->
+      <div class="sidebar-sec sidebar-filters-area">
+
+        <!-- same_year: 対象年度 -->
+        <div class="mode-dependent mode-year">
+          <div class="sidebar-filter-label">対象年度</div>
+          <select name="selected_year" class="sidebar-select" data-auto-submit>
+            <option value="">自動（最新）</option>
+            {% for year in analysis.options.years %}
+            <option value="{{ year }}" {% if analysis.selected_year == year %}selected{% endif %}>{{ year }}</option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <!-- same_company: 対象企業 -->
+        <div class="mode-dependent mode-company">
+          <div class="sidebar-filter-label">対象企業</div>
+          <select name="selected_company" class="sidebar-select" data-auto-submit>
+            <option value="">自動（最多年度）</option>
+            {% for company in analysis.options.companies %}
+            <option value="{{ company.key }}"
+                    {% if analysis.selected_company == company.key %}selected{% endif %}>{{ company.label }}</option>
+            {% endfor %}
+          </select>
+        </div>
+
+        <!-- custom: chart type toggle -->
+        <div class="mode-dependent mode-chart-type">
+          <div class="sidebar-filter-label">チャートタイプ</div>
+          <div class="chart-type-toggle">
+            {% for key, label in analysis.chart_type_labels.items() %}
+            <label class="chart-type-opt {% if analysis.chart_type == key %}is-active{% endif %}">
+              <input type="radio" name="chart_type" value="{{ key }}"
+                     {% if analysis.chart_type == key %}checked{% endif %}>
+              {{ label }}
+            </label>
+            {% endfor %}
+          </div>
+        </div>
+
+        <!-- custom: PDF selection -->
+        <div class="mode-dependent mode-docs">
+          <div class="sidebar-filter-label">
+            PDF選択
+            <span class="doc-count-badge">
+              <strong data-doc-selected-count>{{ analysis.selected_doc_ids|length if analysis.selected_doc_ids else 0 }}</strong>
+              / {{ analysis.record.documents|length }}
+            </span>
+          </div>
+          <div class="doc-filter-actions-row">
+            <button class="button mini ghost" type="button" data-doc-select-all>全選択</button>
+            <button class="button mini ghost" type="button" data-doc-invert>反転</button>
+            <button class="button mini ghost" type="button" data-doc-clear>解除</button>
+          </div>
+          <div class="doc-filter" data-doc-selection-list>
+            {% for doc in analysis.record.documents %}
+            <label class="check-row">
+              <input type="checkbox" name="selected_docs" value="{{ doc.id }}"
+                     {% if doc.id in analysis.selected_doc_ids %}checked{% endif %}>
+              <span class="check-row-body">
+                <strong>{{ doc.security_code or doc.edinet_code or "-" }}</strong>
+                {{ doc.company_name }} / {{ doc.fiscal_year or "年度不明" }}
+              </span>
+            </label>
+            {% endfor %}
+          </div>
+        </div>
+
+        <!-- custom: apply button (only visible in custom mode) -->
+        <div class="mode-dependent mode-custom-apply">
+          <button class="button primary sidebar-apply-btn" type="submit">分析を更新</button>
+        </div>
+
+      </div>
+
+    </form>
+
+    <!-- PDF list -->
+    <div class="sidebar-sec" style="flex:1;min-height:0">
+      <div class="sidebar-sec-label">セッション内PDF ({{ analysis.record.documents|length }})</div>
+      <div class="sidebar-pdf-list">
+        {% for doc in analysis.record.documents %}
+        <div class="sidebar-pdf-item">
+          <span class="conf-dot {% if doc.confidence >= 0.8 %}conf-high{% elif doc.confidence >= 0.4 %}conf-mid{% else %}conf-low{% endif %}"
+                title="信頼度 {{ (doc.confidence * 100)|number }}%"></span>
+          <span class="sidebar-pdf-name" title="{{ doc.filename }}">
+            {{ doc.company_name if doc.company_name and doc.company_name != '未判定' else doc.filename }}
+          </span>
+          <span class="sidebar-pdf-year">{{ doc.fiscal_year or "" }}</span>
+        </div>
+        {% endfor %}
+      </div>
+    </div>
+
+    <!-- Footer actions -->
+    <div class="sidebar-foot">
+      <form action="/analysis/{{ analysis.record.id }}/report" method="post">
+        <input type="hidden" name="mode" value="{{ analysis.mode }}">
+        <input type="hidden" name="selected_year" value="{{ analysis.selected_year or '' }}">
+        <input type="hidden" name="selected_company" value="{{ analysis.selected_company or '' }}">
+        <input type="hidden" name="chart_type" value="{{ analysis.chart_type }}">
+        {% for doc_id in analysis.selected_doc_ids %}
+        <input type="hidden" name="selected_docs" value="{{ doc_id }}">
+        {% endfor %}
+        <button class="button primary" type="submit" style="width:100%">レポート生成</button>
+      </form>
+      {% if current_user.is_admin %}
+      <form action="/analysis/{{ analysis.record.id }}/reparse" method="post">
+        <button class="button" type="submit" style="width:100%">全PDF再解析</button>
+      </form>
+      {% endif %}
+      <a class="button ghost" href="/logout" style="width:100%;justify-content:center">ログアウト</a>
+    </div>
+
+  </aside>
+
+  <!-- ══════════════════════════════════════════════════════════════
+       MAIN AREA
+       ══════════════════════════════════════════════════════════════ -->
+  <div class="main-area">
+
+    <!-- Sticky top bar -->
+    <header class="main-top">
+      <div class="main-top-left">
+        <span class="mode-badge">{{ analysis.mode_label }}</span>
+        <div style="display:flex;gap:6px;flex-wrap:wrap">
+          <span class="stat-chip">{{ analysis.kpis.document_count }} PDF</span>
+          <span class="stat-chip">{{ analysis.kpis.year_range }}</span>
+          <span class="stat-chip">{{ analysis.kpis.company_count }} 企業</span>
+          <span class="stat-chip">信頼度 {{ (analysis.kpis.avg_confidence * 100)|number }}%</span>
+        </div>
+      </div>
+      <div class="main-top-right">
+        <span class="user-chip">{{ current_user.username }} / {{ current_user.role }}</span>
+      </div>
+    </header>
+
+    <!-- Flash notices -->
+    {% if report_file %}
+    <div style="padding:0 24px;padding-top:14px">
+      <div class="notice">レポートを生成しました。<a href="/reports/{{ report_file }}">HTMLレポートをダウンロード</a></div>
+    </div>
+    {% endif %}
+    {% if added %}
+    <div style="padding:0 24px;padding-top:14px">
+      <div class="notice">{{ added }}件のPDFを追加しました。</div>
+    </div>
+    {% endif %}
+    {% if reparsed %}
+    <div style="padding:0 24px;padding-top:14px">
+      <div class="notice">保存済みPDFを再解析しました。</div>
+    </div>
+    {% endif %}
+    {% if deleted %}
+    <div style="padding:0 24px;padding-top:14px">
+      <div class="notice warn">{{ deleted }}件のPDFを削除しました。</div>
+    </div>
+    {% endif %}
+
+    <!-- Tab nav -->
+    <nav class="tab-nav" data-tab-nav>
+      <button class="tab-btn is-active" type="button" data-tab-target="overview">概要</button>
+      <button class="tab-btn" type="button" data-tab-target="metrics">指標比較</button>
+      <button class="tab-btn" type="button" data-tab-target="charts">チャート</button>
+      <button class="tab-btn" type="button" data-tab-target="manage">
+        管理 <span class="tab-badge">{{ analysis.record.documents|length }}</span>
+      </button>
+    </nav>
+
+    <!-- ── Tab: 概要 ─────────────────────────────────────────── -->
+    <div class="tab-panel" data-tab-panel="overview">
+
+      <section class="kpi-strip">
+        <div class="kpi">
+          <span class="kpi-label">分析対象</span>
+          <span class="kpi-value">{{ analysis.kpis.document_count }}</span>
+          <span class="kpi-note">PDF</span>
+        </div>
+        <div class="kpi">
+          <span class="kpi-label">企業数</span>
+          <span class="kpi-value">{{ analysis.kpis.company_count }}</span>
+          <span class="kpi-note">識別子基準</span>
+        </div>
+        <div class="kpi">
+          <span class="kpi-label">対象年度</span>
+          <span class="kpi-value">{{ analysis.kpis.year_range }}</span>
+          <span class="kpi-note">事業年度</span>
+        </div>
+        <div class="kpi">
+          <span class="kpi-label">抽出信頼度 {{ info("avg_confidence") }}</span>
+          <span class="kpi-value">{{ (analysis.kpis.avg_confidence * 100)|number }}%</span>
+          <span class="kpi-note">主要5項目</span>
+        </div>
+      </section>
+
+      <section class="section">
+        <div class="section-head">
+          <div>
+            <h2 class="section-title">サマリー表</h2>
+            <div class="section-sub">主要指標と成長率のクイックビュー。詳細は「指標比較」タブで確認できます。</div>
+          </div>
+        </div>
+        <div class="table-wrap">
+          <table class="data-table trend-table">
+            <thead>
+              <tr>
+                <th>コード / 企業 / 年度</th>
+                <th class="num">売上高</th>
+                <th class="num">営業利益</th>
+                <th class="num">純利益</th>
+                <th class="num">ROA {{ info("roa") }}</th>
+                <th class="num">自己資本比率 {{ info("equity_ratio") }}</th>
+                <th class="num">売上成長率 {{ info("revenue_growth") }}</th>
+                <th class="num">純利益成長率 {{ info("net_income_growth") }}</th>
+              </tr>
+            </thead>
+            <tbody>
+              {% for row in analysis.rows %}
+              <tr>
+                <td class="company-cell">{{ entity(row) }}</td>
+                <td class="num">{{ row.metrics.revenue|metric("revenue") }}</td>
+                <td class="num">{{ row.metrics.operating_income|metric("operating_income") }}</td>
+                <td class="num">{{ row.metrics.net_income|metric("net_income") }}</td>
+                <td class="num">{{ row.derived.roa|metric("roa") }}</td>
+                <td class="num">{{ row.derived.equity_ratio|metric("equity_ratio") }}</td>
+                <td class="num">{{ row.growth.revenue_growth|metric("revenue_growth") }}</td>
+                <td class="num">{{ row.growth.net_income_growth|metric("net_income_growth") }}</td>
+              </tr>
+              {% endfor %}
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+    </div><!-- /overview -->
+
+    <!-- ── Tab: 指標比較 ─────────────────────────────────────── -->
+    <div class="tab-panel" data-tab-panel="metrics" hidden>
+
+      <section class="section comparison-section metric-dashboard" data-category-dashboard>
+        <div class="section-head comparison-head">
+          <div>
+            <h2 class="section-title">主要指標比較</h2>
+            <div class="section-sub">カテゴリを選ぶと表の列とランキングが切り替わります。単位は百万円。</div>
+          </div>
+          <div class="section-meta">
+            <span>{{ analysis.kpis.document_count }} PDF</span>
+            <span>{{ analysis.kpis.year_range }}</span>
+            <span>{{ analysis.kpis.company_count }} 企業</span>
+          </div>
+        </div>
+
+        <div class="category-switch-bar" role="tablist" aria-label="主要指標カテゴリ">
+          {% for category in analysis.metric_categories %}
+          <button class="category-pill {% if loop.first %}is-active{% endif %}"
+                  type="button" role="tab"
+                  aria-selected="{{ 'true' if loop.first else 'false' }}"
+                  data-category-target="{{ category.key }}">
+            <span>{{ category.label }}</span>
+            <small>{{ category.metrics|length }}指標</small>
+          </button>
+          {% endfor %}
+        </div>
+
+        <div class="category-stage">
+          {% for category in analysis.metric_categories %}
+          <article class="metric-category-panel {% if loop.first %}is-active{% endif %}"
+                   data-category-panel="{{ category.key }}" {% if not loop.first %}hidden{% endif %}>
+
+            <div class="category-panel-head">
+              <div>
+                <span class="category-kicker">{{ category.short_label }}</span>
+                <h3>{{ category.label }}</h3>
+                <p>{{ category.description }}</p>
+              </div>
+              <span class="category-count">{{ category.metrics|length }} 指標</span>
+            </div>
+
+            <div class="comparison-table-shell">
+              <table class="data-table comparison-table category-comparison-table">
+                <thead>
+                  <tr>
+                    <th class="sticky-col">企業・年度</th>
+                    {% for metric_def in category.metrics %}
+                    <th class="num">{{ metric_def.label }} {{ info(metric_def.formula_key) }}</th>
+                    {% endfor %}
+                  </tr>
+                </thead>
+                <tbody>
+                  {% for row in analysis.rows %}
+                  <tr>
+                    <td class="company-cell sticky-col">
+                      <div class="entity-stack">
+                        <div class="entity-line">{{ entity(row) }}</div>
+                        <div class="filename">{{ row.filename }}</div>
+                      </div>
+                    </td>
+                    {% for metric_def in category.metrics %}
+                    <td class="num metric-cell metric-{{ metric_def.source }}">
+                      <span class="metric-value">{{ metric_display(row, metric_def) }}</span>
+                    </td>
+                    {% endfor %}
+                  </tr>
+                  {% endfor %}
+                </tbody>
+              </table>
+            </div>
+
+            <div class="category-ranking dashboard-section ranking-section" data-switcher>
+              <div class="section-head ranking-head">
+                <div>
+                  <h2 class="section-title">ランキング</h2>
+                  <div class="section-sub">{{ category.label }}のランキング指標を切り替えます。</div>
+                </div>
+              </div>
+              {% if category.rankings %}
+              <div class="switch-bar ranking-switch-bar" role="tablist">
+                {% for ranking in category.rankings %}
+                <button class="switch-pill {% if loop.first %}is-active{% endif %}"
+                        type="button" role="tab"
+                        aria-selected="{{ 'true' if loop.first else 'false' }}"
+                        data-switch-target="rank-{{ ranking.panel_key }}">
+                  <span>{{ ranking.label }}</span>
+                  <small>Top {{ ranking["items"]|length }}</small>
+                </button>
+                {% endfor %}
+              </div>
+              <div class="ranking-stage">
+                {% for ranking in category.rankings %}
+                <article class="rank-panel rank-board {% if loop.first %}is-active{% endif %}"
+                         data-switch-panel="rank-{{ ranking.panel_key }}" {% if not loop.first %}hidden{% endif %}>
+                  <div class="rank-board-head">
+                    <h3>{{ ranking.label }} {{ info(ranking.formula_key) }}</h3>
+                    <span>Top {{ ranking["items"]|length }}</span>
+                  </div>
+                  {% for item in ranking["items"] %}
+                  <div class="rank-row">
+                    <span class="rank-no">#{{ item.rank }}</span>
+                    <span class="rank-main">{{ entity(item.row) }}</span>
+                    <span class="rank-value">{{ item.value|metric(ranking.key) }}</span>
+                  </div>
+                  <div class="rank-track"><span style="width:{{ item.width }}%"></span></div>
+                  {% endfor %}
+                </article>
+                {% endfor %}
+              </div>
+              {% else %}
+              <div class="empty-panel">このカテゴリでランキング可能な指標がありません。</div>
+              {% endif %}
+            </div>
+
+          </article>
+          {% endfor %}
+        </div>
+      </section>
+
+    </div><!-- /metrics -->
+
+    <!-- ── Tab: チャート ─────────────────────────────────────── -->
+    <div class="tab-panel" data-tab-panel="charts" hidden>
+
+      {% if analysis.chart_categories %}
+      <section class="section dashboard-section chart-section" data-category-dashboard>
+        <div class="section-head chart-section-head">
+          <div>
+            <h2 class="section-title">
+              {% if analysis.chart_type == "bar" %}柱状チャート
+              {% elif analysis.chart_type == "line" %}推移チャート
+              {% else %}散点チャート{% endif %}
+            </h2>
+            <div class="section-sub">
+              {% if analysis.chart_type == "bar" %}単年度の企業比較を指標別に柱状図で表示します。
+              {% elif analysis.chart_type == "line" %}指標カテゴリを選んでから、具体的な指標を切り替えます。
+              {% else %}指標ごとに各PDFを1点として表示します。{% endif %}
+            </div>
+          </div>
+          <span class="chart-mode-badge">{{ analysis.chart_type_label }}</span>
+        </div>
+
+        <div class="category-switch-bar chart-category-switch-bar" role="tablist" aria-label="図表カテゴリ">
+          {% for category in analysis.chart_categories %}
+          <button class="category-pill {% if loop.first %}is-active{% endif %}"
+                  type="button" role="tab"
+                  aria-selected="{{ 'true' if loop.first else 'false' }}"
+                  data-category-target="chart-cat-{{ category.key }}">
+            <span>{{ category.label }}</span>
+            <small>{{ category.charts|length }}</small>
+          </button>
+          {% endfor %}
+        </div>
+
+        <div class="chart-category-stage">
+          {% for category in analysis.chart_categories %}
+          <article class="chart-category-panel {% if loop.first %}is-active{% endif %}"
+                   data-category-panel="chart-cat-{{ category.key }}" {% if not loop.first %}hidden{% endif %}>
+
+            <div class="category-panel-head chart-category-head" style="margin-bottom:12px">
+              <div>
+                <span class="category-kicker">{{ category.short_label }}</span>
+                <h3>{{ category.label }}</h3>
+                <p>{{ category.description }}</p>
+              </div>
+              <span class="category-count">{{ category.charts|length }} 指標</span>
+            </div>
+
+            <div class="chart-metric-switcher" data-switcher>
+              <div class="switch-bar chart-switch-bar" role="tablist">
+                {% for chart in category.charts %}
+                <button class="switch-pill {% if loop.first %}is-active{% endif %}"
+                        type="button" role="tab"
+                        aria-selected="{{ 'true' if loop.first else 'false' }}"
+                        data-switch-target="chart-{{ chart.panel_key }}">
+                  <span>{{ chart.label }}</span>
+                  <small>{% if chart.hint %}{{ chart.hint }} / {% endif %}{{ chart.type_label }}</small>
+                </button>
+                {% endfor %}
+              </div>
+
+              <div class="chart-stage">
+                {% for chart in category.charts %}
+                <article class="trend-card chart-card chart-{{ chart.type }} {% if loop.first %}is-active{% endif %}"
+                         data-switch-panel="chart-{{ chart.panel_key }}" {% if not loop.first %}hidden{% endif %}>
+                  <div class="trend-card-head chart-card-head">
+                    <div>
+                      <span class="chart-kicker">{% if chart.hint %}{{ chart.hint }} / {% endif %}{{ chart.type_label }}</span>
+                      <h3>{{ chart.label }} {{ info(chart.formula_key or chart.key) }}</h3>
+                    </div>
+                    <span>{{ chart.subtitle }}</span>
+                  </div>
+                  <svg class="trend-svg" viewBox="0 0 300 156" role="img" aria-label="{{ chart.label }}">
+                    <line x1="24" y1="132" x2="276" y2="132" class="axis"></line>
+                    <line x1="24" y1="28"  x2="24"  y2="132" class="axis"></line>
+                    {% for gy in [28,54,80,106,132] %}
+                    <line x1="24" y1="{{ gy }}" x2="276" y2="{{ gy }}" class="grid-line"></line>
+                    {% endfor %}
+                    {% if chart.type == "bar" %}
+                    <line x1="24" y1="{{ chart.baseline }}" x2="276" y2="{{ chart.baseline }}" class="zero-line"></line>
+                    {% for bar in chart.bars %}
+                    <g class="trend-point chart-bar" tabindex="0"
+                       aria-label="{{ bar.label }} {{ bar.year }} {{ bar.value|metric(chart.key) }}"
+                       data-point-tooltip="{{ bar.label }} / {{ bar.year }} / {{ bar.value|metric(chart.key) }}">
+                      <rect class="bar-rect" x="{{ bar.x }}" y="{{ bar.y }}" width="{{ bar.width }}" height="{{ bar.height }}" rx="2.5" fill="{{ bar.color }}"></rect>
+                      <rect x="{{ bar.x - 3 }}" y="26" width="{{ bar.width + 6 }}" height="110" fill="transparent"></rect>
+                      <g class="point-label" transform="translate({{ bar.center_x }},{{ bar.y }})">
+                        <rect x="-62" y="-42" width="124" height="34" rx="6"></rect>
+                        <text class="point-label-year" x="0" y="-28" text-anchor="middle">{{ bar.year }}</text>
+                        <text class="point-label-value" x="0" y="-14" text-anchor="middle">{{ bar.value|metric(chart.key) }}</text>
+                      </g>
+                    </g>
+                    {% endfor %}
+                    {% else %}
+                    {% for series in chart.series %}
+                    {% if chart.type == "line" and series.points %}
+                    <polyline points="{{ series.points }}" fill="none" stroke="{{ series.color }}" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"></polyline>
+                    {% endif %}
+                    {% for point in series.raw_points %}
+                    <g class="trend-point" tabindex="0"
+                       aria-label="{{ point.label or series.label }} {{ point.year }} {{ point.value|metric(chart.key) }}"
+                       data-point-tooltip="{{ point.label or series.label }} / {{ point.year }} / {{ point.value|metric(chart.key) }}">
+                      <circle cx="{{ point.x }}" cy="{{ point.y }}" r="4.4" fill="{{ point.color or series.color }}"></circle>
+                      <circle cx="{{ point.x }}" cy="{{ point.y }}" r="11" fill="transparent"></circle>
+                      <g class="point-label" transform="translate({{ point.x }},{{ point.y }})">
+                        <rect x="-62" y="-42" width="124" height="34" rx="6"></rect>
+                        <text class="point-label-year" x="0" y="-28" text-anchor="middle">{{ point.year }}</text>
+                        <text class="point-label-value" x="0" y="-14" text-anchor="middle">{{ point.value|metric(chart.key) }}</text>
+                      </g>
+                    </g>
+                    {% endfor %}
+                    {% endfor %}
+                    {% endif %}
+                    {% if chart.type == "line" %}
+                    {% for year in chart.years %}
+                    {% set xp = 150 if chart.years|length == 1 else 24 + (loop.index0 / (chart.years|length - 1) * 252) %}
+                    <text x="{{ xp }}" y="150" text-anchor="middle">{{ year }}</text>
+                    {% endfor %}
+                    {% else %}
+                    {% for tick in chart.x_ticks %}
+                    {% if tick.show %}<text x="{{ tick.x }}" y="150" text-anchor="middle">{{ tick.label }}</text>{% endif %}
+                    {% endfor %}
+                    {% endif %}
+                  </svg>
+                  {% if chart.type == "line" %}
+                  <div class="legend compact-legend">
+                    {% for series in chart.series %}
+                    <span class="legend-item"><i style="background:{{ series.color }}"></i>{{ series.label }}</span>
+                    {% endfor %}
+                  </div>
+                  {% elif chart.type == "bar" %}
+                  <div class="chart-note">バーにカーソルを合わせると企業・年度・値を確認できます。</div>
+                  {% else %}
+                  <div class="chart-note">各点にカーソルを合わせると詳細を確認できます。</div>
+                  {% endif %}
+                </article>
+                {% endfor %}
+              </div>
+            </div>
+
+          </article>
+          {% endfor %}
+        </div>
+      </section>
+      {% else %}
+      <div class="empty-panel" style="margin:24px 0">表示できるチャートがありません。PDFを追加してください。</div>
+      {% endif %}
+
+    </div><!-- /charts -->
+
+    <!-- ── Tab: 管理 ─────────────────────────────────────────── -->
+    <div class="tab-panel" data-tab-panel="manage" hidden>
+      <div class="manage-grid">
+
+        <!-- Upload more PDFs -->
+        <div class="manage-card">
+          <div class="manage-card-head">
+            <div>
+              <h2>PDFを追加</h2>
+              <p>複数回に分けて別フォルダから選択できます。既存ファイルは保持します。</p>
+            </div>
+          </div>
+          <div class="manage-card-body">
+            <form class="upload-workbench" action="/analysis/{{ analysis.record.id }}/upload"
+                  method="post" enctype="multipart/form-data" data-upload-queue>
+              <input class="file-input-native" type="file" name="files" accept="application/pdf,.pdf" multiple data-file-input>
+              <div class="upload-zone" data-drop-zone style="border:1px dashed var(--bd);border-radius:var(--r-sm);background:var(--bg2);padding:12px">
+                <div class="upload-trigger-row">
+                  <button type="button" class="upload-trigger-btn" data-choose-files>+ PDFを選択</button>
+                  <span class="upload-trigger-hint">またはドラッグ＆ドロップ</span>
+                </div>
+                <div class="queue-empty-hint" data-empty-state>
+                  <span>追加するPDFを選択してください</span>
+                </div>
+                <ul class="queue-list" data-file-list></ul>
+              </div>
+              <div class="upload-footer" style="background:transparent;border:0;padding:10px 0 0">
+                <span class="upload-count-label"><strong data-file-count>0</strong> ファイル選択中</span>
+                <div class="upload-footer-actions">
+                  <button type="button" class="button ghost" data-clear-files>クリア</button>
+                  <button type="submit" class="button primary" data-upload-submit disabled>PDFを追加</button>
+                </div>
+              </div>
+            </form>
+          </div>
+        </div>
+
+        {% if current_user.is_admin %}
+
+        <!-- Delete PDFs -->
+        <div class="manage-card">
+          <form action="/analysis/{{ analysis.record.id }}/documents/delete" method="post" data-delete-form>
+            <input type="hidden" name="mode" value="{{ analysis.mode }}">
+            <input type="hidden" name="selected_year" value="{{ analysis.selected_year or '' }}">
+            <input type="hidden" name="selected_company" value="{{ analysis.selected_company or '' }}">
+            <input type="hidden" name="chart_type" value="{{ analysis.chart_type }}">
+            <div class="manage-card-head">
+              <div>
+                <h2>PDF削除</h2>
+                <p>削除したいPDFを選択して分析から取り除きます。</p>
+              </div>
+              <button class="button danger" type="submit">選択を削除</button>
+            </div>
+            <div class="manage-card-body">
+              <div class="delete-grid">
+                {% for doc in analysis.record.documents %}
+                <label class="delete-row">
+                  <input type="checkbox" name="selected_delete_docs" value="{{ doc.id }}">
+                  <div class="delete-main">
+                    <strong>{{ doc.security_code or doc.edinet_code or "-" }}</strong>
+                    {{ doc.company_name }} / {{ doc.fiscal_year or "年度不明" }}
+                  </div>
+                  <span class="delete-file">{{ doc.filename }}</span>
+                </label>
+                {% endfor %}
+              </div>
+            </div>
+          </form>
+        </div>
+
+        <!-- Extraction review -->
+        <div class="manage-card" style="grid-column:1/-1">
+          <div class="manage-card-head">
+            <div>
+              <h2>抽出結果レビュー</h2>
+              <p>証券コード・会社名・年度・指標値を確認・補正できます。</p>
+            </div>
+          </div>
+          <div class="manage-card-body">
+            {% for doc in analysis.record.documents %}
+            <details class="doc-review">
+              <summary>
+                <span>{{ doc.security_code or doc.edinet_code or "-" }} / {{ doc.company_name }} / {{ doc.fiscal_year or "年度不明" }}</span>
+                <span class="muted">信頼度 {{ (doc.confidence * 100)|number }}% / {{ doc.page_count }} ページ</span>
+              </summary>
+              <div class="doc-review-body">
+                <form action="/analysis/{{ analysis.record.id }}/documents/{{ doc.id }}" method="post">
+                  <div class="edit-grid">
+                    <div class="field">
+                      <label>証券コード</label>
+                      <input type="text" name="security_code" value="{{ doc.security_code }}">
+                    </div>
+                    <div class="field">
+                      <label>EDINETコード</label>
+                      <input type="text" name="edinet_code" value="{{ doc.edinet_code }}">
+                    </div>
+                    <div class="field">
+                      <label>企業名</label>
+                      <input type="text" name="company_name" value="{{ doc.company_name }}">
+                    </div>
+                    <div class="field">
+                      <label>年度</label>
+                      <input type="number" name="fiscal_year" value="{{ doc.fiscal_year or '' }}">
+                    </div>
+                    <div class="field">
+                      <label>単位</label>
+                      <select name="unit">
+                        {% for unit in ["百万円","千円","円"] %}
+                        <option value="{{ unit }}" {% if doc.unit == unit %}selected{% endif %}>{{ unit }}</option>
+                        {% endfor %}
+                      </select>
+                    </div>
+                  </div>
+                  <div class="edit-grid metric-edit-grid">
+                    {% for key in analysis.metric_order %}
+                    <div class="field">
+                      <label>{{ analysis.metric_labels[key] }}</label>
+                      <input type="text" name="metric_{{ key }}"
+                             value="{{ doc.metrics.get(key) if doc.metrics.get(key) is not none else '' }}">
+                    </div>
+                    {% endfor %}
+                  </div>
+                  <div class="notes">
+                    <button class="button" type="submit">補正を保存</button>
+                    {% if doc.extraction_notes %}
+                    <ul style="margin-top:10px">
+                      {% for note in doc.extraction_notes[:18] %}
+                      <li>{{ note }}</li>
+                      {% endfor %}
+                    </ul>
+                    {% endif %}
+                  </div>
+                </form>
+              </div>
+            </details>
+            {% endfor %}
+          </div>
+        </div>
+
+        {% endif %}
+      </div>
+    </div><!-- /manage -->
+
+  </div><!-- /main-area -->
+</div><!-- /app-layout -->
+
+<script src="/static/uploader.js?v=20260515-16"></script>
+</body>
+</html>

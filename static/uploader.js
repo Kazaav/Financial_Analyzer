@@ -2,15 +2,19 @@
   "use strict";
 
   /* ── Upload queue ─────────────────────────────────────────────── */
-  function initUploader(form) {
-    var fileInput = form.querySelector("[data-file-input]");
-    var fileList  = form.querySelector("[data-file-list]");
-    var emptyState= form.querySelector("[data-empty-state]");
-    var chooseBtn = form.querySelector("[data-choose-files]");
-    var clearBtn  = form.querySelector("[data-clear-files]");
-    var submitBtn = form.querySelector("[data-upload-submit], [type='submit']");
-    var countEl   = form.querySelector("[data-file-count]");
-    var dropZone  = form.querySelector("[data-drop-zone]") || form;
+  function initUploader(container) {
+    // The data-upload-queue attribute may be on the FORM itself or on a wrapping DIV.
+    // Find the actual <form> element so FormData(form) works.
+    var form = container.tagName === "FORM" ? container : container.querySelector("form");
+    if (!form) return;
+    var fileInput = container.querySelector("[data-file-input]");
+    var fileList  = container.querySelector("[data-file-list]");
+    var emptyState= container.querySelector("[data-empty-state]");
+    var chooseBtn = container.querySelector("[data-choose-files]");
+    var clearBtn  = container.querySelector("[data-clear-files]");
+    var submitBtn = container.querySelector("[data-upload-submit], [type='submit']");
+    var countEl   = container.querySelector("[data-file-count]");
+    var dropZone  = container.querySelector("[data-drop-zone]") || container;
     var files     = [];
 
     if (!fileInput) return;

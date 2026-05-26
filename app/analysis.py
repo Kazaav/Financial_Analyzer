@@ -640,10 +640,51 @@ def build_rankings(rows: list[dict[str, Any]]) -> dict[str, list[dict[str, Any]]
     }
 
 
+def _sparkline_path(series: list[float], width: int = 80, height: int = 28, padding: int = 3) -> str | None:
+    """Generate SVG polyline points string for a sparkline; returns None if not enough data."""
+    if len(series) < 2:
+        return None
+    mn = min(series)
+    mx = max(series)
+    rng = mx - mn or 1
+    n = len(series)
+    points = []
+    for i, v in enumerate(series):
+        x = padding + (width - 2 * padding) * i / (n - 1)
+        y = height - padding - (height - 2 * padding) * (v - mn) / rng
+        points.append(f"{x:.1f},{y:.1f}")
+    return " ".join(points)
+
+
+def _yoy(series: list[float]) -> float | None:
+    if len(series) < 2 or series[-2] == 0:
+        return None
+    return (series[-1] - series[-2]) / abs(series[-2])
+
+
 def summary_kpis(rows: list[dict[str, Any]]) -> dict[str, Any]:
     companies = {row["company_key"] for row in rows}
     years = sorted({row["fiscal_year"] for row in rows if row["fiscal_year"] is not None})
     avg_conf = sum(row["doc"].confidence for row in rows) / len(rows) if rows else 0
+
+    # Per-year aggregates for sparklines (sum across companies/PDFs by year)
+    by_year: dict[int, dict[str, float]] = {}
+    for row in rows:
+        year = row["fiscal_year"]
+        if year is None:
+            continue
+        bucket = by_year.setdefault(year, {"revenue": 0.0, "net_income": 0.0, "operating_income": 0.0, "count": 0})
+        for key in ("revenue", "net_income", "operating_income"):
+            v = row["metrics"].get(key)
+            if v is not None:
+                bucket[key] += v
+        bucket["count"] += 1
+
+    sorted_years = sorted(by_year.keys())
+    revenue_series = [by_year[y]["revenue"] for y in sorted_years]
+    net_income_series = [by_year[y]["net_income"] for y in sorted_years]
+    operating_series = [by_year[y]["operating_income"] for y in sorted_years]
+
     return {
         "document_count": len(rows),
         "company_count": len(companies),
@@ -651,6 +692,15 @@ def summary_kpis(rows: list[dict[str, Any]]) -> dict[str, Any]:
         "avg_confidence": avg_conf,
         "total_revenue": sum(row["metrics"].get("revenue") or 0 for row in rows),
         "total_net_income": sum(row["metrics"].get("net_income") or 0 for row in rows),
+        # Sparkline data
+        "trend_years": sorted_years,
+        "revenue_series": revenue_series,
+        "revenue_spark": _sparkline_path(revenue_series),
+        "revenue_yoy": _yoy(revenue_series),
+        "net_income_series": net_income_series,
+        "net_income_spark": _sparkline_path(net_income_series),
+        "net_income_yoy": _yoy(net_income_series),
+        "operating_spark": _sparkline_path(operating_series),
     }
 
 

@@ -3,18 +3,22 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>有報分析プラットフォーム</title>
-  <link rel="stylesheet" href="/static/styles.css?v=20260515-16">
+  <title>新規分析 · Financial Analyzer</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&family=Noto+Sans+JP:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/styles.css?v=20260526-1">
 </head>
 <body>
 <div class="home-wrap">
 
   <header class="top-nav">
     <div class="top-nav-brand">
-      <h1>有価証券報告書 分析プラットフォーム</h1>
-      <p>PDFから財務データを抽出・比較・可視化</p>
+      <h1>新しい分析を開始</h1>
+      <p>PDF をアップロードして財務データを抽出します</p>
     </div>
     <div class="top-nav-actions">
+      <a class="button ghost" href="/">← トップ</a>
       <span class="user-chip">{{ current_user.username }} / {{ current_user.role }}</span>
       <a class="button ghost" href="/logout">ログアウト</a>
     </div>
@@ -22,11 +26,10 @@
 
   <div class="home-grid">
 
-    <!-- Upload card -->
     <div class="upload-card" data-upload-queue>
       <div class="upload-card-head">
-        <h2>PDFをアップロードして分析を開始</h2>
-        <p>複数ファイル・複数フォルダから繰り返し選択できます。ドラッグ＆ドロップも対応。</p>
+        <h2>PDF をアップロード</h2>
+        <p>複数ファイル・複数フォルダから繰り返し選択できます。ドラッグ＆ドロップにも対応。</p>
       </div>
 
       <form action="/upload" method="post" enctype="multipart/form-data">
@@ -53,23 +56,22 @@
       </form>
     </div>
 
-    <!-- Feature list -->
-    <div class="feature-grid panel" style="border-radius:12px;overflow:hidden">
+    <div class="feature-grid">
       <div class="feature">
         <strong>抽出対象</strong>
-        <p class="muted">売上高・各利益・総資産・純資産・CF・従業員数など13指標を自動抽出します。</p>
+        <p class="muted">売上高・各利益・総資産・純資産・CF・従業員数など13指標を自動抽出。</p>
       </div>
       <div class="feature">
         <strong>抽出根拠</strong>
-        <p class="muted">各指標に参照した有報セクションとページ番号を記録し、確認・補正ができます。</p>
+        <p class="muted">各指標に参照した有報セクションとページ番号を記録し、補正可能。</p>
       </div>
       <div class="feature">
         <strong>3つの比較モード</strong>
-        <p class="muted">多社同年度・同一企業時系列・カスタム選択。企業識別は証券コードとEDINETを自動統合。</p>
+        <p class="muted">多社同年度・同一企業時系列・カスタム選択。証券コードとEDINETを統合判定。</p>
       </div>
       <div class="feature">
         <strong>レポート出力</strong>
-        <p class="muted">指標比較・チャート・ランキングをCSS埋め込みのスタンドアローンHTMLとして出力できます。</p>
+        <p class="muted">指標・チャート・ランキングを単一HTMLとして出力。</p>
       </div>
     </div>
 
@@ -92,6 +94,6 @@
   {% endif %}
 
 </div>
-<script src="/static/uploader.js?v=20260515-16"></script>
+<script src="/static/uploader.js?v=20260526-1"></script>
 </body>
 </html>

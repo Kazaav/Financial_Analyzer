@@ -15,7 +15,7 @@ from .analysis import METRIC_ORDER, build_analysis
 from .auth import authenticate, clear_login_cookie, login_redirect, read_session_user, require_admin, set_login_cookie
 from .cleanup import is_demo_id, maybe_cleanup_expired_storage
 from .ai_providers import get_ai_provider
-from .formatting import fmt_metric, fmt_money, fmt_number, fmt_percent, fmt_ratio, score_label
+from .formatting import fmt_metric, fmt_money, fmt_money_compact, fmt_number, fmt_percent, fmt_ratio, score_label
 from .models import AnalysisRecord, FinancialDocument
 from .pdf_parser import parse_pdf
 from .reporting import generate_report
@@ -32,6 +32,7 @@ app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
 templates.env.filters["number"] = fmt_number
 templates.env.filters["money"] = fmt_money
+templates.env.filters["money_compact"] = fmt_money_compact
 templates.env.filters["percent"] = fmt_percent
 templates.env.filters["ratio"] = fmt_ratio
 templates.env.filters["metric"] = fmt_metric

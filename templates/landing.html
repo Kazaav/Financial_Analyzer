@@ -1,0 +1,94 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Financial Analyzer · 有価証券報告書 分析ツール</title>
+  <meta name="description" content="有価証券報告書 PDF から財務データを抽出し、企業間・年度間で比較可視化する分析ツール。">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/styles.css?v=20260526-1">
+</head>
+<body>
+<div class="landing">
+
+  <nav class="landing-nav">
+    <div class="landing-brand">
+      <span class="landing-brand-dot"></span>
+      <span>Financial Analyzer</span>
+    </div>
+    <div class="landing-nav-links">
+      <a href="https://github.com/" target="_blank" rel="noopener">GitHub</a>
+      {% if current_user %}
+        <a href="/app">アプリへ</a>
+      {% else %}
+        <a href="/login">ログイン</a>
+      {% endif %}
+    </div>
+  </nav>
+
+  <section class="landing-hero">
+    <div class="landing-eyebrow">日本上場企業 · 有価証券報告書</div>
+    <h1 class="landing-headline">財務データを、<br>もっと素直に読む。</h1>
+    <p class="landing-sub">
+      有価証券報告書 PDF から13項目の主要指標を自動抽出し、企業間・年度間で比較・可視化するツール。
+      研究と実務の両方で「ただ素直に数字を並べる」体験を目指して作りました。
+    </p>
+    <div class="landing-cta-row">
+      <a class="button primary" href="#demos">サンプルを見る →</a>
+      <a class="button ghost" href="/login">ログインしてアップロード</a>
+    </div>
+  </section>
+
+  <section class="landing-section" id="demos">
+    <div class="landing-section-label">サンプル分析 / Sample Analyses</div>
+    <div class="demo-grid">
+      {% for demo in demos %}
+      <a class="demo-card" href="{{ demo.href }}">
+        <span class="demo-card-num">{{ "0%d"|format(loop.index) }}</span>
+        <div class="demo-card-title">{{ demo.title }}</div>
+        <div class="demo-card-sub">{{ demo.subtitle }}</div>
+        <span class="demo-card-arrow">View analysis →</span>
+      </a>
+      {% endfor %}
+    </div>
+  </section>
+
+  <section class="landing-section">
+    <div class="landing-section-label">機能 / Capabilities</div>
+    <div class="capability-grid">
+      <div class="capability">
+        <div class="capability-num">01</div>
+        <div class="capability-title">PDF 構造解析</div>
+        <div class="capability-desc">主要な経営指標等の推移・連結 B/S・P/L・C/F の各セクションをページ単位で識別し抽出します。</div>
+      </div>
+      <div class="capability">
+        <div class="capability-num">02</div>
+        <div class="capability-title">13指標 × 派生12指標</div>
+        <div class="capability-desc">売上高・利益・資産・CF を自動抽出し、ROA・ROE・自己資本比率などを計算式とともに表示。</div>
+      </div>
+      <div class="capability">
+        <div class="capability-num">03</div>
+        <div class="capability-title">3つの比較モード</div>
+        <div class="capability-desc">多社同年度・同一企業時系列・カスタム選択。証券コード/EDINETによる企業同一性判定。</div>
+      </div>
+      <div class="capability">
+        <div class="capability-num">04</div>
+        <div class="capability-title">レポート出力</div>
+        <div class="capability-desc">分析結果を CSS 埋め込みのスタンドアロン HTML として出力可能。</div>
+      </div>
+    </div>
+  </section>
+
+  <footer class="landing-foot">
+    <span>© {{ 2026 }} Financial Analyzer</span>
+    <span>
+      <a href="https://github.com/" target="_blank" rel="noopener">GitHub</a>
+      <a href="/login">Login</a>
+    </span>
+  </footer>
+
+</div>
+</body>
+</html>

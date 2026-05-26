@@ -3,8 +3,11 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>{{ analysis.mode_label }} - 有報分析</title>
-  <link rel="stylesheet" href="/static/styles.css?v=20260515-16">
+  <title>{{ analysis.mode_label }} · Financial Analyzer</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/styles.css?v=20260526-1">
 </head>
 <body>
 {% macro info(key) -%}
@@ -33,8 +36,12 @@
        ══════════════════════════════════════════════════════════════ -->
   <aside class="sidebar">
     <div class="sidebar-top">
-      <span class="sidebar-brand">有報分析</span>
-      <a class="sidebar-back" href="/">← 新規</a>
+      <span class="sidebar-brand">Financial Analyzer</span>
+      {% if is_demo %}
+      <a class="sidebar-back" href="/">← トップ</a>
+      {% else %}
+      <a class="sidebar-back" href="/app">← 新規</a>
+      {% endif %}
     </div>
 
     <!-- Mode + filter form -->
@@ -169,6 +176,7 @@
 
     <!-- Footer actions -->
     <div class="sidebar-foot">
+      {% if not is_demo %}
       <form action="/analysis/{{ analysis.record.id }}/report" method="post">
         <input type="hidden" name="mode" value="{{ analysis.mode }}">
         <input type="hidden" name="selected_year" value="{{ analysis.selected_year or '' }}">
@@ -179,12 +187,17 @@
         {% endfor %}
         <button class="button primary" type="submit" style="width:100%">レポート生成</button>
       </form>
-      {% if current_user.is_admin %}
+      {% endif %}
+      {% if current_user and current_user.is_admin and not is_demo %}
       <form action="/analysis/{{ analysis.record.id }}/reparse" method="post">
         <button class="button" type="submit" style="width:100%">全PDF再解析</button>
       </form>
       {% endif %}
+      {% if current_user %}
       <a class="button ghost" href="/logout" style="width:100%;justify-content:center">ログアウト</a>
+      {% else %}
+      <a class="button ghost" href="/login" style="width:100%;justify-content:center">ログイン</a>
+      {% endif %}
     </div>
 
   </aside>
@@ -206,9 +219,22 @@
         </div>
       </div>
       <div class="main-top-right">
+        {% if current_user %}
         <span class="user-chip">{{ current_user.username }} / {{ current_user.role }}</span>
+        {% elif is_demo %}
+        <span class="user-chip">DEMO · 読み取り専用</span>
+        {% endif %}
       </div>
     </header>
+
+    {% if is_demo and demo_meta %}
+    <div class="demo-banner">
+      <span class="demo-banner-dot"></span>
+      <span class="demo-banner-title">{{ demo_meta.title }}</span>
+      <span class="demo-banner-sub">{{ demo_meta.subtitle }}</span>
+      <a class="demo-banner-link" href="/">他のサンプル →</a>
+    </div>
+    {% endif %}
 
     <!-- Flash notices -->
     {% if report_file %}
@@ -237,9 +263,11 @@
       <button class="tab-btn is-active" type="button" data-tab-target="overview">概要</button>
       <button class="tab-btn" type="button" data-tab-target="metrics">指標比較</button>
       <button class="tab-btn" type="button" data-tab-target="charts">チャート</button>
+      {% if not is_demo %}
       <button class="tab-btn" type="button" data-tab-target="manage">
         管理 <span class="tab-badge">{{ analysis.record.documents|length }}</span>
       </button>
+      {% endif %}
     </nav>
 
     <!-- ── Tab: 概要 ─────────────────────────────────────────── -->
@@ -247,24 +275,48 @@
 
       <section class="kpi-strip">
         <div class="kpi">
-          <span class="kpi-label">分析対象</span>
-          <span class="kpi-value">{{ analysis.kpis.document_count }}</span>
-          <span class="kpi-note">PDF</span>
+          <span class="kpi-label">売上高合計</span>
+          <span class="kpi-value">{{ analysis.kpis.total_revenue|money_compact }}</span>
+          <span class="kpi-note">
+            {% if analysis.kpis.revenue_yoy is not none %}
+              {% if analysis.kpis.revenue_yoy > 0 %}<span class="kpi-trend plus">▲ {{ (analysis.kpis.revenue_yoy * 100)|number(1) }}%</span>
+              {% elif analysis.kpis.revenue_yoy < 0 %}<span class="kpi-trend minus">▼ {{ ((analysis.kpis.revenue_yoy|abs) * 100)|number(1) }}%</span>
+              {% else %}<span class="kpi-trend flat">→ 0%</span>{% endif %}
+              <span style="color:var(--t4)"> 直近YoY</span>
+            {% else %}集計値（単年）{% endif %}
+          </span>
+          {% if analysis.kpis.revenue_spark %}
+          <svg class="kpi-spark" viewBox="0 0 80 28" preserveAspectRatio="none">
+            <polyline points="{{ analysis.kpis.revenue_spark }}" fill="none" stroke="#6ea8ff" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+          {% endif %}
         </div>
         <div class="kpi">
-          <span class="kpi-label">企業数</span>
-          <span class="kpi-value">{{ analysis.kpis.company_count }}</span>
-          <span class="kpi-note">識別子基準</span>
+          <span class="kpi-label">純利益合計</span>
+          <span class="kpi-value">{{ analysis.kpis.total_net_income|money_compact }}</span>
+          <span class="kpi-note">
+            {% if analysis.kpis.net_income_yoy is not none %}
+              {% if analysis.kpis.net_income_yoy > 0 %}<span class="kpi-trend plus">▲ {{ (analysis.kpis.net_income_yoy * 100)|number(1) }}%</span>
+              {% elif analysis.kpis.net_income_yoy < 0 %}<span class="kpi-trend minus">▼ {{ ((analysis.kpis.net_income_yoy|abs) * 100)|number(1) }}%</span>
+              {% else %}<span class="kpi-trend flat">→ 0%</span>{% endif %}
+              <span style="color:var(--t4)"> 直近YoY</span>
+            {% else %}集計値（単年）{% endif %}
+          </span>
+          {% if analysis.kpis.net_income_spark %}
+          <svg class="kpi-spark" viewBox="0 0 80 28" preserveAspectRatio="none">
+            <polyline points="{{ analysis.kpis.net_income_spark }}" fill="none" stroke="#4ade80" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+          </svg>
+          {% endif %}
         </div>
         <div class="kpi">
-          <span class="kpi-label">対象年度</span>
-          <span class="kpi-value">{{ analysis.kpis.year_range }}</span>
-          <span class="kpi-note">事業年度</span>
+          <span class="kpi-label">カバレッジ</span>
+          <span class="kpi-value">{{ analysis.kpis.document_count }} <small style="font-size:14px;color:var(--t3);font-weight:400">PDF</small></span>
+          <span class="kpi-note">{{ analysis.kpis.company_count }} 企業 · {{ analysis.kpis.year_range }}</span>
         </div>
         <div class="kpi">
           <span class="kpi-label">抽出信頼度 {{ info("avg_confidence") }}</span>
-          <span class="kpi-value">{{ (analysis.kpis.avg_confidence * 100)|number }}%</span>
-          <span class="kpi-note">主要5項目</span>
+          <span class="kpi-value">{{ (analysis.kpis.avg_confidence * 100)|number }}<small style="font-size:16px;color:var(--t3);font-weight:400">%</small></span>
+          <span class="kpi-note">主要5項目の抽出成功率</span>
         </div>
       </section>
 
@@ -581,6 +633,7 @@
     </div><!-- /charts -->
 
     <!-- ── Tab: 管理 ─────────────────────────────────────────── -->
+    {% if not is_demo %}
     <div class="tab-panel" data-tab-panel="manage" hidden>
       <div class="manage-grid">
 
@@ -722,10 +775,11 @@
         {% endif %}
       </div>
     </div><!-- /manage -->
+    {% endif %}
 
   </div><!-- /main-area -->
 </div><!-- /app-layout -->
 
-<script src="/static/uploader.js?v=20260515-16"></script>
+<script src="/static/uploader.js?v=20260526-1"></script>
 </body>
 </html>

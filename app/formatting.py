@@ -19,6 +19,22 @@ def fmt_money(value: float | int | None) -> str:
     return f"{fmt_number(value, 0)} 百万円"
 
 
+def fmt_money_compact(value: float | int | None) -> str:
+    """Format million-yen as 兆 / 億 / 百万 with compact display for dashboards."""
+    if value is None:
+        return "-"
+    try:
+        v = float(value)
+    except (TypeError, ValueError):
+        return "-"
+    abs_v = abs(v)
+    if abs_v >= 1_000_000:
+        return f"{v / 1_000_000:.2f}兆円"
+    if abs_v >= 100:
+        return f"{v / 100:,.0f}億円"
+    return f"{v:,.0f}百万円"
+
+
 def fmt_percent(value: float | int | None) -> str:
     if value is None:
         return "-"

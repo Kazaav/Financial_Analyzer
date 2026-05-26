@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
+from .cleanup import is_demo_id
 from .models import AnalysisRecord
 from .settings import ANALYSIS_DIR, ensure_storage
 
@@ -24,10 +25,12 @@ def load_record(analysis_id: str) -> AnalysisRecord:
     return AnalysisRecord.from_dict(data)
 
 
-def list_records(limit: int = 12) -> list[dict[str, str]]:
+def list_records(limit: int = 12, include_demo: bool = False) -> list[dict[str, str]]:
     ensure_storage()
     rows: list[dict[str, str]] = []
     for path in sorted(Path(ANALYSIS_DIR).glob("*.json"), key=lambda p: p.stat().st_mtime, reverse=True):
+        if not include_demo and is_demo_id(path.stem):
+            continue
         data = json.loads(path.read_text(encoding="utf-8"))
         rows.append(
             {

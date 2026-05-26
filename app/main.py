@@ -13,7 +13,7 @@ from fastapi.templating import Jinja2Templates
 
 from .analysis import METRIC_ORDER, build_analysis
 from .auth import authenticate, clear_login_cookie, login_redirect, read_session_user, require_admin, set_login_cookie
-from .cleanup import maybe_cleanup_expired_storage
+from .cleanup import is_demo_id, maybe_cleanup_expired_storage
 from .ai_providers import get_ai_provider
 from .formatting import fmt_metric, fmt_money, fmt_number, fmt_percent, fmt_ratio, score_label
 from .models import AnalysisRecord, FinancialDocument
@@ -26,7 +26,7 @@ from .storage import list_records, load_record, save_record
 ensure_storage()
 maybe_cleanup_expired_storage(force=True)
 
-app = FastAPI(title="Financial PDF Analyzer", version="0.2.0")
+app = FastAPI(title="Financial PDF Analyzer", version="0.3.0")
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
 templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
@@ -38,13 +38,39 @@ templates.env.filters["metric"] = fmt_metric
 templates.env.filters["score_label"] = score_label
 
 
-PUBLIC_PATHS = ("/login", "/static", "/favicon.ico", "/healthz")
+PUBLIC_PATHS = ("/login", "/static", "/favicon.ico", "/healthz", "/demo")
+ROOT_PUBLIC_PATHS = {"/"}
+
+
+DEMO_REGISTRY: dict[str, dict[str, str]] = {
+    "it-services": {
+        "analysis_id": "demo-it-services",
+        "title": "IT サービス3社の財務比較",
+        "subtitle": "TIS / アバントグループ / 野村総合研究所 — 2020〜2025 年度",
+        "default_mode": "same_company",
+    },
+    "timeseries-nri": {
+        "analysis_id": "demo-it-services",
+        "title": "野村総合研究所 6年間の財務推移",
+        "subtitle": "売上・利益・CF・財務指標の経年変化",
+        "default_mode": "same_company",
+        "preset": {"selected_company": "4307"},
+    },
+    "cross-2024": {
+        "analysis_id": "demo-it-services",
+        "title": "IT サービス3社 2024年度横断比較",
+        "subtitle": "同年度のKPI・指標を一画面で",
+        "default_mode": "same_year",
+        "preset": {"selected_year": "2024"},
+    },
+}
 
 
 @app.middleware("http")
 async def auth_and_cleanup_middleware(request: Request, call_next):
     maybe_cleanup_expired_storage()
-    if request.url.path.startswith(PUBLIC_PATHS):
+    path = request.url.path
+    if path in ROOT_PUBLIC_PATHS or path.startswith(PUBLIC_PATHS):
         return await call_next(request)
 
     user = read_session_user(request)
@@ -59,10 +85,31 @@ async def healthz():
     return {"ok": True}
 
 
+@app.get("/")
+async def landing_page(request: Request):
+    user = read_session_user(request)
+    demos = []
+    for slug, meta in DEMO_REGISTRY.items():
+        params = {"mode": meta.get("default_mode", "same_year")}
+        params.update(meta.get("preset", {}))
+        href = f"/demo/{slug}?{urlencode(params)}"
+        demos.append({
+            "slug": slug,
+            "title": meta["title"],
+            "subtitle": meta["subtitle"],
+            "href": href,
+        })
+    return templates.TemplateResponse(
+        request,
+        "landing.html",
+        {"demos": demos, "current_user": user},
+    )
+
+
 @app.get("/login")
-async def login_page(request: Request, next: str = "/"):
+async def login_page(request: Request, next: str = "/app"):
     if read_session_user(request):
-        return RedirectResponse(url=next if next.startswith("/") and not next.startswith("//") else "/", status_code=303)
+        return RedirectResponse(url=next if next.startswith("/") and not next.startswith("//") else "/app", status_code=303)
     return templates.TemplateResponse(request, "login.html", {"next": next, "error": ""})
 
 
@@ -71,7 +118,7 @@ async def login_submit(
     request: Request,
     username: str = Form(""),
     password: str = Form(""),
-    next: str = Form("/"),
+    next: str = Form("/app"),
 ):
     user = authenticate(username.strip(), password)
     if not user:
@@ -81,7 +128,7 @@ async def login_submit(
             {"next": next, "error": "ユーザー名またはパスワードが正しくありません。"},
             status_code=401,
         )
-    target = next if next.startswith("/") and not next.startswith("//") else "/"
+    target = next if next.startswith("/") and not next.startswith("//") else "/app"
     response = RedirectResponse(url=target, status_code=303)
     set_login_cookie(response, user)
     return response
@@ -89,7 +136,7 @@ async def login_submit(
 
 @app.get("/logout")
 async def logout():
-    response = RedirectResponse(url="/login", status_code=303)
+    response = RedirectResponse(url="/", status_code=303)
     clear_login_cookie(response)
     return response
 
@@ -161,8 +208,13 @@ async def parse_uploaded_pdfs(analysis_id: str, files: list[UploadFile]) -> list
     return documents
 
 
-@app.get("/")
-async def index(request: Request):
+def reject_demo_mutation(analysis_id: str) -> None:
+    if is_demo_id(analysis_id):
+        raise HTTPException(status_code=403, detail="デモデータは編集できません。")
+
+
+@app.get("/app")
+async def app_index(request: Request):
     provider = get_ai_provider()
     return templates.TemplateResponse(
         request,
@@ -191,6 +243,7 @@ async def upload_pdfs(files: list[UploadFile] = File(...)):
 
 @app.post("/analysis/{analysis_id}/upload")
 async def append_pdfs(analysis_id: str, files: list[UploadFile] = File(...)):
+    reject_demo_mutation(analysis_id)
     try:
         record = load_record(analysis_id)
     except FileNotFoundError as exc:
@@ -205,6 +258,7 @@ async def append_pdfs(analysis_id: str, files: list[UploadFile] = File(...)):
 @app.post("/analysis/{analysis_id}/reparse")
 async def reparse_documents(request: Request, analysis_id: str):
     require_admin(request)
+    reject_demo_mutation(analysis_id)
     try:
         record = load_record(analysis_id)
     except FileNotFoundError as exc:
@@ -227,19 +281,21 @@ async def reparse_documents(request: Request, analysis_id: str):
     return RedirectResponse(url=f"/analysis/{analysis_id}?reparsed=1", status_code=303)
 
 
-@app.get("/analysis/{analysis_id}")
-async def analysis_page(
+def _render_analysis_page(
     request: Request,
     analysis_id: str,
-    mode: str = Query("same_year"),
-    selected_year: str | None = Query(None),
-    selected_company: str | None = Query(None),
-    selected_docs: list[str] = Query(default=[]),
-    chart_type: str | None = Query(None),
-    report_file: str | None = Query(None),
-    added: str | None = Query(None),
-    reparsed: str | None = Query(None),
-    deleted: str | None = Query(None),
+    mode: str,
+    selected_year: str | None,
+    selected_company: str | None,
+    selected_docs: list[str],
+    chart_type: str | None,
+    report_file: str | None,
+    added: str | None,
+    reparsed: str | None,
+    deleted: str | None,
+    is_demo: bool,
+    current_user,
+    demo_meta: dict | None = None,
 ):
     try:
         record = load_record(analysis_id)
@@ -263,8 +319,78 @@ async def analysis_page(
             "added": added,
             "reparsed": reparsed,
             "deleted": deleted,
-            "current_user": request.state.user,
+            "current_user": current_user,
+            "is_demo": is_demo,
+            "demo_meta": demo_meta,
         },
+    )
+
+
+@app.get("/analysis/{analysis_id}")
+async def analysis_page(
+    request: Request,
+    analysis_id: str,
+    mode: str = Query("same_year"),
+    selected_year: str | None = Query(None),
+    selected_company: str | None = Query(None),
+    selected_docs: list[str] = Query(default=[]),
+    chart_type: str | None = Query(None),
+    report_file: str | None = Query(None),
+    added: str | None = Query(None),
+    reparsed: str | None = Query(None),
+    deleted: str | None = Query(None),
+):
+    return _render_analysis_page(
+        request,
+        analysis_id,
+        mode,
+        selected_year,
+        selected_company,
+        selected_docs,
+        chart_type,
+        report_file,
+        added,
+        reparsed,
+        deleted,
+        is_demo=is_demo_id(analysis_id),
+        current_user=request.state.user,
+    )
+
+
+@app.get("/demo/{slug}")
+async def demo_page(
+    request: Request,
+    slug: str,
+    mode: str | None = Query(None),
+    selected_year: str | None = Query(None),
+    selected_company: str | None = Query(None),
+    selected_docs: list[str] = Query(default=[]),
+    chart_type: str | None = Query(None),
+):
+    meta = DEMO_REGISTRY.get(slug)
+    if not meta:
+        raise HTTPException(status_code=404, detail="demo not found")
+
+    resolved_mode = mode or meta.get("default_mode", "same_year")
+    preset = meta.get("preset", {})
+    resolved_year = selected_year if selected_year is not None else preset.get("selected_year")
+    resolved_company = selected_company if selected_company is not None else preset.get("selected_company")
+
+    return _render_analysis_page(
+        request,
+        meta["analysis_id"],
+        resolved_mode,
+        resolved_year,
+        resolved_company,
+        selected_docs,
+        chart_type,
+        report_file=None,
+        added=None,
+        reparsed=None,
+        deleted=None,
+        is_demo=True,
+        current_user=read_session_user(request),
+        demo_meta={"slug": slug, **meta},
     )
 
 
@@ -279,6 +405,7 @@ async def delete_documents(
     chart_type: str | None = Form(None),
 ):
     require_admin(request)
+    reject_demo_mutation(analysis_id)
     try:
         record = load_record(analysis_id)
     except FileNotFoundError as exc:
@@ -319,6 +446,7 @@ async def delete_documents(
 @app.post("/analysis/{analysis_id}/documents/{doc_id}")
 async def update_document(request: Request, analysis_id: str, doc_id: str):
     require_admin(request)
+    reject_demo_mutation(analysis_id)
     try:
         record = load_record(analysis_id)
     except FileNotFoundError as exc:

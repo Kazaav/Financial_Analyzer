@@ -20,6 +20,13 @@ def _safe_unlink(path: Path, root: Path) -> bool:
     return False
 
 
+DEMO_PREFIX = "demo-"
+
+
+def is_demo_id(record_id: str) -> bool:
+    return record_id.startswith(DEMO_PREFIX)
+
+
 def cleanup_expired_storage() -> int:
     if RETENTION_DAYS <= 0:
         return 0
@@ -30,6 +37,8 @@ def cleanup_expired_storage() -> int:
 
     expired_analysis_ids: set[str] = set()
     for record_path in ANALYSIS_DIR.glob("*.json"):
+        if is_demo_id(record_path.stem):
+            continue
         try:
             if record_path.stat().st_mtime < cutoff:
                 expired_analysis_ids.add(record_path.stem)
@@ -39,6 +48,8 @@ def cleanup_expired_storage() -> int:
             continue
 
     for upload_path in UPLOAD_DIR.glob("*"):
+        if is_demo_id(upload_path.name):
+            continue
         try:
             should_remove = upload_path.stat().st_mtime < cutoff or any(upload_path.name.startswith(f"{analysis_id}-") for analysis_id in expired_analysis_ids)
         except OSError:
@@ -47,6 +58,8 @@ def cleanup_expired_storage() -> int:
             removed += 1
 
     for report_path in REPORT_DIR.glob("*"):
+        if is_demo_id(report_path.name):
+            continue
         try:
             should_remove = report_path.stat().st_mtime < cutoff or any(analysis_id in report_path.name for analysis_id in expired_analysis_ids)
         except OSError:

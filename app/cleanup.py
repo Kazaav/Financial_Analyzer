@@ -3,8 +3,14 @@ from __future__ import annotations
 import time
 from pathlib import Path
 
-from .settings import ANALYSIS_DIR, CLEANUP_INTERVAL_SECONDS, REPORT_DIR, RETENTION_DAYS, STORAGE_DIR, UPLOAD_DIR
-
+from .settings import (
+    ANALYSIS_DIR,
+    CLEANUP_INTERVAL_SECONDS,
+    REPORT_DIR,
+    RETENTION_DAYS,
+    STORAGE_DIR,
+    UPLOAD_DIR,
+)
 
 _last_cleanup = 0.0
 

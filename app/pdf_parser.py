@@ -11,7 +11,6 @@ import fitz
 
 from .models import FinancialDocument
 
-
 DISPLAY_NAMES = {
     "revenue": "売上高",
     "gross_profit": "売上総利益",
@@ -155,9 +154,7 @@ def looks_numeric_line(line: str) -> bool:
         return True
     if re.fullmatch(r"[△▲(（-]?\s*\d[\d,]*(?:\.\d+)?\s*[)）]?", stripped):
         return True
-    if re.fullmatch(r"※\d+\s+[△▲(（-]?\s*\d[\d,]*(?:\.\d+)?\s*[)）]?", stripped):
-        return True
-    return False
+    return bool(re.fullmatch(r"※\d+\s+[△▲(（-]?\s*\d[\d,]*(?:\.\d+)?\s*[)）]?", stripped))
 
 
 def detect_unit(text: str) -> str:
@@ -584,7 +581,7 @@ def extract_metrics_from_statements(pages: list[PageText]) -> dict[str, Extracte
 def extract_metrics(pages: list[PageText], default_unit: str) -> tuple[dict[str, float | None], dict[str, dict[str, Any]], list[str], float]:
     major = extract_metrics_from_major_indicators(pages)
     statements = extract_metrics_from_statements(pages)
-    metrics: dict[str, float | None] = {key: None for key in DISPLAY_NAMES}
+    metrics: dict[str, float | None] = dict.fromkeys(DISPLAY_NAMES)
     sources: dict[str, dict[str, Any]] = {}
     notes: list[str] = []
 

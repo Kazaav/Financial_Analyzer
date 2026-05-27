@@ -1,35 +1,65 @@
 from __future__ import annotations
 
 import re
+import time
 from datetime import datetime
 from pathlib import Path
 from urllib.parse import urlencode
 from uuid import uuid4
 
+import fitz  # PyMuPDF
 from fastapi import FastAPI, File, Form, HTTPException, Query, Request, UploadFile
 from fastapi.responses import FileResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
-import fitz  # PyMuPDF
 
-from .analysis import METRIC_ORDER, build_analysis
-from .auth import authenticate, clear_login_cookie, login_redirect, read_session_user, require_admin, set_login_cookie
-from .cleanup import is_demo_id, maybe_cleanup_expired_storage
 from .ai_providers import get_ai_provider
+from .analysis import METRIC_ORDER, build_analysis
+from .auth import (
+    authenticate,
+    clear_login_cookie,
+    login_redirect,
+    read_session_user,
+    require_admin,
+    set_login_cookie,
+)
+from .cleanup import is_demo_id, maybe_cleanup_expired_storage
 from .export import build_export_payload, build_filename, to_csv, to_json, to_xlsx
-from .formatting import fmt_metric, fmt_money, fmt_money_compact, fmt_number, fmt_percent, fmt_ratio, score_label
-from .i18n import COOKIE_NAME as LANG_COOKIE, SUPPORTED as LANG_SUPPORTED, get_lang, translator
+from .formatting import (
+    fmt_metric,
+    fmt_money,
+    fmt_money_compact,
+    fmt_number,
+    fmt_percent,
+    fmt_ratio,
+    score_label,
+)
+from .i18n import COOKIE_NAME as LANG_COOKIE
+from .i18n import SUPPORTED as LANG_SUPPORTED
+from .i18n import get_lang, translator
 from .models import AnalysisRecord, FinancialDocument
+from .observability import (
+    REQUEST_DURATION,
+    REQUESTS_TOTAL,
+    configure_logging,
+    get_logger,
+    is_prometheus_available,
+    metrics_response,
+    record_parse,
+)
 from .pdf_parser import parse_pdf
 from .reporting import generate_report
 from .settings import REPORT_DIR, STATIC_DIR, TEMPLATES_DIR, UPLOAD_DIR, ensure_storage
 from .storage import list_records, load_record, save_record
 
+configure_logging()
+log = get_logger()
+log.info("starting", extra={"event": "startup"})
 
 ensure_storage()
 maybe_cleanup_expired_storage(force=True)
 
-app = FastAPI(title="Financial PDF Analyzer", version="0.3.0")
+app = FastAPI(title="Financial PDF Analyzer", version="0.4.0")
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 
 templates = Jinja2Templates(directory=str(TEMPLATES_DIR))
@@ -42,7 +72,7 @@ templates.env.filters["metric"] = fmt_metric
 templates.env.filters["score_label"] = score_label
 
 
-PUBLIC_PATHS = ("/login", "/static", "/favicon.ico", "/healthz", "/demo", "/source-page", "/set-lang")
+PUBLIC_PATHS = ("/login", "/static", "/favicon.ico", "/healthz", "/metrics", "/demo", "/source-page", "/set-lang")
 ROOT_PUBLIC_PATHS = {"/"}
 
 
@@ -77,9 +107,7 @@ def _path_is_public(path: str) -> bool:
     # /analysis/demo-... (demo records) are publicly viewable so the sidebar's
     # form action (which always points to /analysis/{record_id}) keeps working
     # when an unauthenticated visitor changes mode / filters within a demo.
-    if path.startswith("/analysis/demo-"):
-        return True
-    return False
+    return path.startswith("/analysis/demo-")
 
 
 @app.middleware("http")
@@ -136,7 +164,33 @@ async def set_lang(code: str, next: str = "/"):
 
 @app.get("/healthz")
 async def healthz():
-    return {"ok": True}
+    return {"ok": True, "prometheus": is_prometheus_available()}
+
+
+@app.get("/metrics")
+async def metrics_endpoint():
+    body, content_type = metrics_response()
+    return Response(content=body, media_type=content_type)
+
+
+@app.middleware("http")
+async def metrics_middleware(request: Request, call_next):
+    """Track HTTP request count + latency. Cheap, never raises into the app."""
+    if not is_prometheus_available():
+        return await call_next(request)
+    start = time.perf_counter()
+    response = await call_next(request)
+    duration = time.perf_counter() - start
+    # Use the route path template if available, otherwise the raw path.
+    route = request.scope.get("route")
+    route_label = route.path if route is not None and hasattr(route, "path") else request.url.path
+    status_class = f"{response.status_code // 100}xx"
+    try:
+        REQUESTS_TOTAL.labels(method=request.method, route=route_label, status=status_class).inc()
+        REQUEST_DURATION.labels(method=request.method, route=route_label).observe(duration)
+    except Exception:  # pragma: no cover
+        pass
+    return response
 
 
 @app.get("/")
@@ -238,7 +292,7 @@ def error_document(doc_id: str, filename: str, stored_path: Path, message: str) 
         page_count=0,
         char_count=0,
         text_excerpt="",
-        metrics={key: None for key in METRIC_ORDER},
+        metrics=dict.fromkeys(METRIC_ORDER),
         extraction_notes=[f"PDF解析エラー: {message}"],
         confidence=0.0,
     )
@@ -255,9 +309,21 @@ async def parse_uploaded_pdfs(analysis_id: str, files: list[UploadFile]) -> list
         doc_id = uuid4().hex[:10]
         stored_path = UPLOAD_DIR / f"{analysis_id}-{doc_id}-{original}"
         stored_path.write_bytes(await upload.read())
+        parse_start = time.perf_counter()
         try:
             document = parse_pdf(stored_path, doc_id, original)
+            record_parse("ok", time.perf_counter() - parse_start, document.confidence)
+            log.info("pdf_parsed", extra={
+                "event": "pdf_parsed", "analysis_id": analysis_id,
+                "doc_id": doc_id, "confidence": document.confidence,
+                "duration_s": round(time.perf_counter() - parse_start, 3),
+            })
         except Exception as exc:
+            record_parse("error", time.perf_counter() - parse_start)
+            log.warning("pdf_parse_failed", extra={
+                "event": "pdf_parse_failed", "analysis_id": analysis_id,
+                "doc_id": doc_id, "error": str(exc),
+            })
             document = error_document(doc_id, original, stored_path, str(exc))
         documents.append(document)
     return documents

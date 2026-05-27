@@ -9,7 +9,6 @@ from __future__ import annotations
 
 from fastapi import Request
 
-
 SUPPORTED = ("ja", "en", "zh")
 DEFAULT = "ja"
 COOKIE_NAME = "fa_lang"

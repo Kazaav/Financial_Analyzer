@@ -3,7 +3,6 @@ from __future__ import annotations
 from dataclasses import asdict, dataclass, field
 from typing import Any
 
-
 MetricMap = dict[str, float | None]
 
 
@@ -30,7 +29,7 @@ class FinancialDocument:
         return asdict(self)
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> "FinancialDocument":
+    def from_dict(cls, data: dict[str, Any]) -> FinancialDocument:
         return cls(
             id=data["id"],
             filename=data["filename"],
@@ -65,7 +64,7 @@ class AnalysisRecord:
         }
 
     @classmethod
-    def from_dict(cls, data: dict[str, Any]) -> "AnalysisRecord":
+    def from_dict(cls, data: dict[str, Any]) -> AnalysisRecord:
         return cls(
             id=data["id"],
             created_at=data["created_at"],

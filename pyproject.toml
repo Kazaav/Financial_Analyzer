@@ -1,0 +1,58 @@
+[project]
+name = "financial-analyzer"
+version = "0.4.0"
+description = "有価証券報告書 (Japanese annual securities report) PDF analyzer — extracts financial metrics, compares across companies and years, exports to CSV/Excel/JSON."
+readme = "README.md"
+requires-python = ">=3.11"
+license = { text = "MIT" }
+dependencies = [
+    "fastapi",
+    "uvicorn",
+    "jinja2",
+    "python-multipart",
+    "pymupdf",
+    "pdfplumber",
+    "pandas",
+    "openpyxl",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7",
+    "httpx",         # required by FastAPI TestClient
+    "ruff>=0.5",
+    "mypy>=1.10",
+    "pre-commit",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra -q"
+filterwarnings = [
+    "ignore::DeprecationWarning",
+]
+
+[tool.ruff]
+line-length = 110
+target-version = "py311"
+extend-exclude = ["scripts/debug_*.py", "ex_company"]
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "SIM", "C4"]
+ignore = [
+    "E501",   # line length (we use 110; long template strings may exceed)
+    "B008",   # FastAPI uses Depends(Foo()) pattern; default arg constructors are fine
+    "UP007",  # X | Y union syntax — leave conservative for type aliases
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["B017"]
+
+[tool.mypy]
+python_version = "3.11"
+strict = false
+warn_unused_ignores = true
+warn_redundant_casts = true
+disallow_untyped_defs = false
+ignore_missing_imports = true
+exclude = ["scripts/", "ex_company/"]

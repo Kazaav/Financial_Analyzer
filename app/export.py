@@ -11,10 +11,9 @@ import io
 import json
 from typing import Any
 
-from .analysis import DERIVED_LABELS, FORMULAS, METRIC_ORDER, build_analysis
+from .analysis import DERIVED_LABELS, FORMULAS, METRIC_ORDER
 from .models import AnalysisRecord
 from .pdf_parser import DISPLAY_NAMES
-
 
 GROWTH_LABELS = {
     "revenue_growth": "売上成長率",
@@ -156,7 +155,7 @@ def to_xlsx(payload: dict[str, Any]) -> bytes:
     # Freeze first column + header
     main_sheet.freeze_panes = "C2"
     # Column widths (rough auto)
-    for col_idx, (key, label) in enumerate(all_cols, start=1):
+    for col_idx, (_key, label) in enumerate(all_cols, start=1):
         width = max(12, min(28, len(label) * 2.2 + 4))
         main_sheet.column_dimensions[get_column_letter(col_idx)].width = width
 

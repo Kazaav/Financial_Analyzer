@@ -1,14 +1,13 @@
 from __future__ import annotations
 
-from collections import Counter, defaultdict
 import re
 import unicodedata
+from collections import Counter, defaultdict
 from math import isfinite
 from typing import Any
 
 from .models import AnalysisRecord, FinancialDocument
 from .pdf_parser import DISPLAY_NAMES
-
 
 MODE_LABELS = {
     "same_year": "多社同年度比較",
@@ -259,7 +258,7 @@ DOCUMENT_CODE_RE = re.compile(r"(?<![0-9A-Z])S[0-9A-Z]{6,}(?![0-9A-Z])", re.IGNO
 def normalize_identity(value: str | None) -> str:
     text = unicodedata.normalize("NFKC", str(value or "")).strip()
     text = re.sub(r"[\s　]+", "", text)
-    text = text.strip("-_??/\\|:;,.????()[]{}<>????????")
+    text = text.strip("-_??/\\|:;,.????()[]{}<>????????")  # noqa: B005
     return text.upper()
 
 

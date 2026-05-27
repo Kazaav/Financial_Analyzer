@@ -14,7 +14,6 @@ from fastapi.responses import RedirectResponse, Response
 
 from .settings import COOKIE_SECURE, SESSION_MAX_AGE_SECONDS
 
-
 SESSION_COOKIE = "financial_analyzer_session"
 DEFAULT_USERS = (
     "zekkx:admin:pbkdf2_sha256$260000$DgpWnsn44Eot6gOuFXVS6g$Yg4J63AmftT9OrHM2uv_AKjvtkg3UCzm9mwzixDafto;"

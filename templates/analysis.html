@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="ja">
+<html lang="{{ lang or 'ja' }}">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&family=Noto+Sans+JP:wght@400;500;600;700&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/static/styles.css?v=20260527-1">
+  <link rel="stylesheet" href="/static/styles.css?v=20260527-3">
 </head>
 <body>
 {% macro info(key) -%}
@@ -176,6 +176,24 @@
 
     <!-- Footer actions -->
     <div class="sidebar-foot">
+
+      {# Build a query-string reflecting current filter state, used by export links #}
+      {%- set _params = [] -%}
+      {%- if analysis.mode %}{% set _ = _params.append('mode=' ~ analysis.mode) %}{% endif -%}
+      {%- if analysis.selected_year %}{% set _ = _params.append('selected_year=' ~ analysis.selected_year) %}{% endif -%}
+      {%- if analysis.selected_company %}{% set _ = _params.append('selected_company=' ~ analysis.selected_company) %}{% endif -%}
+      {%- if analysis.chart_type %}{% set _ = _params.append('chart_type=' ~ analysis.chart_type) %}{% endif -%}
+      {%- for doc_id in analysis.selected_doc_ids %}{% set _ = _params.append('selected_docs=' ~ doc_id) %}{% endfor -%}
+      {%- set _qs = _params|join('&') -%}
+
+      <div class="sidebar-foot-label">{{ t('sidebar.export') }}</div>
+      <div class="export-grid">
+        <a class="button mini" href="/analysis/{{ analysis.record.id }}/export.csv?{{ _qs }}" download>CSV</a>
+        <a class="button mini" href="/analysis/{{ analysis.record.id }}/export.xlsx?{{ _qs }}" download>Excel</a>
+        <a class="button mini" href="/analysis/{{ analysis.record.id }}/export.json?{{ _qs }}" download>JSON</a>
+      </div>
+      <button class="button" type="button" onclick="window.print()" style="width:100%">{{ t('sidebar.print') }}</button>
+
       {% if not is_demo %}
       <form action="/analysis/{{ analysis.record.id }}/report" method="post">
         <input type="hidden" name="mode" value="{{ analysis.mode }}">
@@ -185,7 +203,7 @@
         {% for doc_id in analysis.selected_doc_ids %}
         <input type="hidden" name="selected_docs" value="{{ doc_id }}">
         {% endfor %}
-        <button class="button primary" type="submit" style="width:100%">レポート生成</button>
+        <button class="button primary" type="submit" style="width:100%">{{ t('sidebar.report') }}</button>
       </form>
       {% endif %}
       {% if current_user and current_user.is_admin and not is_demo %}
@@ -194,9 +212,9 @@
       </form>
       {% endif %}
       {% if current_user %}
-      <a class="button ghost" href="/logout" style="width:100%;justify-content:center">ログアウト</a>
+      <a class="button ghost" href="/logout" style="width:100%;justify-content:center">{{ t('nav.logout') }}</a>
       {% else %}
-      <a class="button ghost" href="/login" style="width:100%;justify-content:center">ログイン</a>
+      <a class="button ghost" href="/login" style="width:100%;justify-content:center">{{ t('nav.login') }}</a>
       {% endif %}
     </div>
 
@@ -255,12 +273,12 @@
 
       <!-- Tab nav lives inside the sticky header so it scrolls together. -->
       <nav class="tab-nav" data-tab-nav>
-        <button class="tab-btn is-active" type="button" data-tab-target="overview">概要</button>
-        <button class="tab-btn" type="button" data-tab-target="metrics">指標比較</button>
-        <button class="tab-btn" type="button" data-tab-target="charts">チャート</button>
+        <button class="tab-btn is-active" type="button" data-tab-target="overview">{{ t('tab.overview') }}</button>
+        <button class="tab-btn" type="button" data-tab-target="metrics">{{ t('tab.metrics') }}</button>
+        <button class="tab-btn" type="button" data-tab-target="charts">{{ t('tab.charts') }}</button>
         {% if not is_demo %}
         <button class="tab-btn" type="button" data-tab-target="manage">
-          管理 <span class="tab-badge">{{ analysis.record.documents|length }}</span>
+          {{ t('tab.manage') }} <span class="tab-badge">{{ analysis.record.documents|length }}</span>
         </button>
         {% endif %}
       </nav>
@@ -784,7 +802,7 @@
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js"></script>
-<script src="/static/chart.js?v=20260527-1"></script>
-<script src="/static/uploader.js?v=20260527-1"></script>
+<script src="/static/chart.js?v=20260527-3"></script>
+<script src="/static/uploader.js?v=20260527-3"></script>
 </body>
 </html>

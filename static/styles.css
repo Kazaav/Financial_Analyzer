@@ -203,6 +203,22 @@ input[type="radio"]{accent-color:var(--accent)}
 .landing-nav-links a{color:var(--t2);font-size:13px;padding:6px 10px;border-radius:var(--r-sm)}
 .landing-nav-links a:hover{color:var(--t1);background:var(--bg-elev-2)}
 
+/* Language switcher (D4) */
+.lang-switch{
+  display:inline-flex;align-items:center;
+  border:1px solid var(--bd-strong);border-radius:var(--r-sm);
+  overflow:hidden;background:var(--bg-elev-1);
+}
+.lang-switch .lang-opt{
+  padding:5px 9px;font-size:11px;font-weight:600;
+  font-family:var(--font-mono);letter-spacing:.02em;
+  color:var(--t3);border-right:1px solid var(--bd);
+  text-decoration:none;line-height:1.2;
+}
+.lang-switch .lang-opt:last-child{border-right:0}
+.lang-switch .lang-opt:hover{background:var(--bg-elev-2);color:var(--t1)}
+.lang-switch .lang-opt.is-active{background:var(--accent);color:#0a0d13}
+
 .landing-hero{
   max-width:1240px;margin:0 auto;padding:96px 32px 64px;
   text-align:center;
@@ -442,6 +458,12 @@ input[type="radio"]{accent-color:var(--accent)}
 .sidebar-pdf-year{color:var(--t4);flex-shrink:0;font-variant-numeric:tabular-nums}
 
 .sidebar-foot{margin-top:auto;padding:14px 16px;border-top:1px solid var(--bd);display:grid;gap:8px}
+.sidebar-foot-label{
+  font-size:10px;font-weight:600;letter-spacing:.06em;color:var(--t3);
+  font-family:var(--font-mono);text-transform:uppercase;
+}
+.export-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:5px}
+.export-grid .button{justify-content:center}
 
 .mode-seg{
   display:grid;grid-template-columns:repeat(3,1fr);
@@ -1068,8 +1090,91 @@ input[type="radio"]{accent-color:var(--accent)}
   .landing-hero{padding:48px 20px 32px}
   .landing-section{padding:32px 20px}
 }
+/* ══════════════════════════════════════════════════════════════════
+   21. PRINT — A4 layout for browser "Save as PDF" (D3)
+   ══════════════════════════════════════════════════════════════════ */
+@page{
+  size:A4;
+  margin:14mm 14mm 16mm 14mm;
+}
+
 @media print{
-  body{background:#fff;color:#000}
-  .report-doc .app-shell{width:auto;padding:20px}
-  .sidebar,.tab-nav,.main-top,.upload-workbench,.demo-banner,.actions{display:none!important}
+  /* Light-on-white for print legibility */
+  :root{
+    --bg-base:#ffffff;
+    --bg-elev-1:#ffffff;
+    --bg-elev-2:#f7f8fa;
+    --bg-elev-3:#eef0f4;
+    --bd:#d8dde6;
+    --bd-strong:#aab2c0;
+    --bd-soft:#e6e9ef;
+    --t1:#0c1018;
+    --t2:#2d3340;
+    --t3:#54606f;
+    --t4:#8590a2;
+    --accent:#1e60c8;
+    --accent-dim:rgba(30,96,200,.08);
+    --plus:#157a36;
+    --minus:#9c2a1a;
+    --highlight:#a06200;
+  }
+  html,body{background:#fff !important;color:#0c1018 !important}
+  body{background-image:none !important}
+
+  /* Hide app chrome — only the report content prints */
+  .sidebar,.app-layout > .main-area > .main-header,
+  .main-header,.tab-nav,.main-top,.demo-banner,
+  .sidebar-toggle,.actions,.upload-workbench,
+  .source-modal,.trend-floating-tooltip,.info-floating-tooltip,
+  .button,.export-grid,.sidebar-foot-label{display:none !important}
+
+  /* Show only the active tab panel */
+  .tab-panel[hidden]{display:none !important}
+  .tab-panel{padding:0 !important}
+
+  /* For the dedicated report page */
+  .report-doc{background:#fff}
+  .report-doc .app-shell{width:auto;padding:0;margin:0}
+  .app-shell{width:auto;padding:0;margin:0}
+
+  /* Container */
+  .main-area{margin-left:0 !important}
+  .app-layout{display:block}
+
+  /* Header tweak */
+  .page-head{
+    border:0;background:transparent;
+    padding:0 0 14px;margin-bottom:14px;
+    border-bottom:1.5pt solid #0c1018;
+  }
+  .brand{color:#0c1018 !important}
+
+  /* Tables */
+  table{page-break-inside:auto}
+  tr{page-break-inside:avoid;page-break-after:auto}
+  thead{display:table-header-group}
+  .data-table th,.comparison-table th{
+    background:#eef0f4 !important;color:#2d3340 !important;
+    border-bottom:0.75pt solid #aab2c0 !important;
+  }
+  .data-table td,.comparison-table td{
+    border-bottom:0.5pt solid #d8dde6 !important;
+  }
+
+  /* KPI strip */
+  .kpi-strip{border:0.75pt solid #aab2c0 !important;background:#fff !important}
+  .kpi{border-right:0.5pt solid #d8dde6 !important;background:#fff !important}
+  .kpi-spark{display:none !important}
+
+  /* SVG / ECharts: hide ECharts canvas, prefer report's embedded SVG */
+  .echart-host{display:none !important}
+
+  /* Trend / chart cards & ranking */
+  .trend-card,.chart-card,.rank-board,.rank-panel{
+    background:#fff !important;border:0.5pt solid #d8dde6 !important;
+    box-shadow:none !important;break-inside:avoid;
+  }
+  .panel,.table-wrap,.comparison-table-shell{break-inside:avoid;box-shadow:none !important}
+  .info-dot,.metric-src-btn{display:none !important}
+  section,article{break-inside:avoid-page}
 }

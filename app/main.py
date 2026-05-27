@@ -16,7 +16,9 @@ from .analysis import METRIC_ORDER, build_analysis
 from .auth import authenticate, clear_login_cookie, login_redirect, read_session_user, require_admin, set_login_cookie
 from .cleanup import is_demo_id, maybe_cleanup_expired_storage
 from .ai_providers import get_ai_provider
+from .export import build_export_payload, build_filename, to_csv, to_json, to_xlsx
 from .formatting import fmt_metric, fmt_money, fmt_money_compact, fmt_number, fmt_percent, fmt_ratio, score_label
+from .i18n import COOKIE_NAME as LANG_COOKIE, SUPPORTED as LANG_SUPPORTED, get_lang, translator
 from .models import AnalysisRecord, FinancialDocument
 from .pdf_parser import parse_pdf
 from .reporting import generate_report
@@ -40,7 +42,7 @@ templates.env.filters["metric"] = fmt_metric
 templates.env.filters["score_label"] = score_label
 
 
-PUBLIC_PATHS = ("/login", "/static", "/favicon.ico", "/healthz", "/demo", "/source-page")
+PUBLIC_PATHS = ("/login", "/static", "/favicon.ico", "/healthz", "/demo", "/source-page", "/set-lang")
 ROOT_PUBLIC_PATHS = {"/"}
 
 
@@ -84,14 +86,52 @@ def _path_is_public(path: str) -> bool:
 async def auth_and_cleanup_middleware(request: Request, call_next):
     maybe_cleanup_expired_storage()
     path = request.url.path
-    # Always populate request.state.user so handlers can use it on either
-    # public (demo) or authenticated routes; None for unauthenticated visitors.
+    # Resolve language and user up-front so all handlers and templates can access them.
+    request.state.lang = get_lang(request)
+    request.state.t = translator(request.state.lang)
     request.state.user = read_session_user(request)
     if _path_is_public(path):
         return await call_next(request)
     if not request.state.user:
         return login_redirect(request)
     return await call_next(request)
+
+
+# Make t / lang available as Jinja globals via context-processor pattern.
+@app.middleware("http")
+async def inject_i18n_into_templates(request: Request, call_next):
+    response = await call_next(request)
+    return response
+
+
+# Override Jinja2Templates TemplateResponse to always inject lang and t.
+_original_template_response = templates.TemplateResponse
+
+
+def _template_response_with_i18n(*args, **kwargs):
+    # Find the request and context in arguments
+    if args and hasattr(args[0], "state"):
+        request = args[0]
+        context = args[2] if len(args) > 2 else kwargs.get("context", {})
+    else:
+        request = kwargs.get("request")
+        context = kwargs.get("context") or (args[1] if len(args) > 1 else {})
+    if request is not None and isinstance(context, dict):
+        context.setdefault("lang", getattr(request.state, "lang", "ja"))
+        context.setdefault("t", getattr(request.state, "t", translator("ja")))
+    return _original_template_response(*args, **kwargs)
+
+
+templates.TemplateResponse = _template_response_with_i18n  # type: ignore[assignment]
+
+
+@app.get("/set-lang/{code}")
+async def set_lang(code: str, next: str = "/"):
+    target = next if next.startswith("/") and not next.startswith("//") else "/"
+    response = RedirectResponse(url=target, status_code=303)
+    if code in LANG_SUPPORTED:
+        response.set_cookie(LANG_COOKIE, code, max_age=60 * 60 * 24 * 365, samesite="lax")
+    return response
 
 
 @app.get("/healthz")
@@ -534,6 +574,90 @@ async def download_report(filename: str):
     if not path.exists():
         raise HTTPException(status_code=404, detail="report not found")
     return FileResponse(path, media_type="text/html", filename=path.name)
+
+
+def _build_export_for(
+    analysis_id: str,
+    mode: str,
+    selected_year: str | None,
+    selected_company: str | None,
+    selected_docs: list[str],
+    chart_type: str | None,
+):
+    try:
+        record = load_record(analysis_id)
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    analysis = build_analysis(
+        record,
+        mode=mode,
+        selected_year=parse_optional_int(selected_year),
+        selected_company=selected_company,
+        selected_doc_ids=selected_docs,
+        chart_type=chart_type,
+    )
+    payload = build_export_payload(record, analysis)
+    return record, payload
+
+
+@app.get("/analysis/{analysis_id}/export.csv")
+async def export_csv(
+    analysis_id: str,
+    mode: str = Query("same_year"),
+    selected_year: str | None = Query(None),
+    selected_company: str | None = Query(None),
+    selected_docs: list[str] = Query(default=[]),
+    chart_type: str | None = Query(None),
+):
+    record, payload = _build_export_for(analysis_id, mode, selected_year, selected_company, selected_docs, chart_type)
+    body = to_csv(payload).encode("utf-8")
+    filename = build_filename(record, mode, "csv")
+    return Response(
+        content=body,
+        media_type="text/csv; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@app.get("/analysis/{analysis_id}/export.json")
+async def export_json(
+    analysis_id: str,
+    mode: str = Query("same_year"),
+    selected_year: str | None = Query(None),
+    selected_company: str | None = Query(None),
+    selected_docs: list[str] = Query(default=[]),
+    chart_type: str | None = Query(None),
+):
+    record, payload = _build_export_for(analysis_id, mode, selected_year, selected_company, selected_docs, chart_type)
+    body = to_json(payload).encode("utf-8")
+    filename = build_filename(record, mode, "json")
+    return Response(
+        content=body,
+        media_type="application/json; charset=utf-8",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@app.get("/analysis/{analysis_id}/export.xlsx")
+async def export_xlsx(
+    analysis_id: str,
+    mode: str = Query("same_year"),
+    selected_year: str | None = Query(None),
+    selected_company: str | None = Query(None),
+    selected_docs: list[str] = Query(default=[]),
+    chart_type: str | None = Query(None),
+):
+    record, payload = _build_export_for(analysis_id, mode, selected_year, selected_company, selected_docs, chart_type)
+    try:
+        body = to_xlsx(payload)
+    except ImportError as exc:
+        raise HTTPException(status_code=500, detail=f"openpyxl is required for xlsx export: {exc}") from exc
+    filename = build_filename(record, mode, "xlsx")
+    return Response(
+        content=body,
+        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
 
 
 @app.get("/source-page/{analysis_id}/{doc_id}/{page}.png")

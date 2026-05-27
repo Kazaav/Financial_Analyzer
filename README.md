@@ -175,4 +175,4 @@ Edge cases collected so far: TIS, アバントグループ, 野村総合研究�
 
 ## License
 
-MIT. See `LICENSE` if you forked this and need the text — I have not committed one to this repository yet; treat it as MIT in spirit until I do.
+[MIT](LICENSE)

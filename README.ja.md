@@ -177,4 +177,4 @@ GET  /healthz                                   # ヘルスチェック
 
 ## ライセンス
 
-MIT。`LICENSE` ファイルはまだコミットしていませんが、MITとして扱ってください。
+[MIT](LICENSE)

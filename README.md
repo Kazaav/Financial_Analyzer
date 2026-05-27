@@ -1,9 +1,12 @@
 # Financial Analyzer
 
+**[English]** | [日本語](README.ja.md)
+
 > Extract, compare, and visualise financial data from Japanese 有価証券報告書 (annual securities report) PDFs.
 
 A small web tool that reads consolidated financials directly out of EDINET-style PDF reports and turns them into a clean, comparable dashboard. Built originally to speed up my own document-by-document analysis when reading dozens of reports for graduate research — published so anyone facing the same paperwork can avoid the same grind.
 
+GitHub: **<https://github.com/Kazaav/Financial_Analyzer>**  
 Live: **<https://fin.zekkx.icu>**
 
 ---
@@ -85,7 +88,7 @@ Storage is plain JSON files on disk — fine for the personal-tool use case, and
 ### Local run
 
 ```bash
-git clone <this-repo>
+git clone https://github.com/Kazaav/Financial_Analyzer.git
 cd financial-analyzer
 python -m venv venv
 source venv/bin/activate      # Windows: venv\Scripts\activate

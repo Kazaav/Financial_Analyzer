@@ -8,3 +8,4 @@ venv/
 .venv/
 *.log
 ex_company/
+改进方案*.md

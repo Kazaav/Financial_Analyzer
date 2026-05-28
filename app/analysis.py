@@ -6,6 +6,7 @@ from collections import Counter, defaultdict
 from math import isfinite
 from typing import Any
 
+from .formatting import fmt_money_compact, fmt_number, fmt_percent, fmt_ratio
 from .models import AnalysisRecord, FinancialDocument
 from .pdf_parser import DISPLAY_NAMES
 
@@ -742,6 +743,25 @@ def chart_y(value: float, min_value: float, max_value: float) -> float:
     return 132 - (value - min_value) / (max_value - min_value) * 104
 
 
+def _compact_label(value: float, metric_key: str) -> str:
+    if metric_key == "employees":
+        return f"{fmt_number(value, 0)}人"
+    if metric_key in {"asset_turnover", "current_ratio", "cf_quality", "debt_to_equity"}:
+        return fmt_ratio(value)
+    if metric_key.endswith("_margin") or metric_key in {"roa", "roe", "equity_ratio", "liability_ratio", "revenue_growth", "net_income_growth"}:
+        return fmt_percent(value)
+    return fmt_money_compact(value)
+
+
+def _y_ticks(min_v: float, max_v: float, metric_key: str) -> list[dict]:
+    mid_v = min_v + (max_v - min_v) * 0.5
+    return [
+        {"y": 28,  "label": _compact_label(max_v, metric_key)},
+        {"y": 80,  "label": _compact_label(mid_v, metric_key)},
+        {"y": 132, "label": _compact_label(min_v, metric_key)},
+    ]
+
+
 def row_chart_label(row: dict[str, Any]) -> str:
     code = row.get("display_code") or "-"
     name = row.get("company_name") or ""
@@ -882,7 +902,7 @@ def line_charts(rows: list[dict[str, Any]], metrics: list[dict[str, Any]]) -> li
             if coords:
                 first = company_rows[-1]
                 series.append({"key": key, "label": f"{first['display_code']} {first['company_name']}", "color": color, "points": " ".join(coords), "raw_points": raw_points})
-        charts.append({"key": metric_key, "label": metric_label, "hint": CHART_METRIC_HINTS.get(metric_key, ""), "source": source, "formula_key": metric.get("formula_key", metric_key), "type": "line", "type_label": CHART_TYPE_LABELS["line"], "subtitle": f"{years[0]}-{years[-1]}" if len(years) > 1 else str(years[0]), "years": years, "x_ticks": [], "series": series, "bars": []})
+        charts.append({"key": metric_key, "label": metric_label, "hint": CHART_METRIC_HINTS.get(metric_key, ""), "source": source, "formula_key": metric.get("formula_key", metric_key), "type": "line", "type_label": CHART_TYPE_LABELS["line"], "subtitle": f"{years[0]}-{years[-1]}" if len(years) > 1 else str(years[0]), "years": years, "x_ticks": [], "series": series, "bars": [], "y_ticks": _y_ticks(min_value, max_value, metric_key)})
     return charts
 
 
@@ -916,7 +936,7 @@ def scatter_charts(rows: list[dict[str, Any]], metrics: list[dict[str, Any]]) ->
             x_ticks.append({"x": round(x, 1), "label": short_label, "show": count <= 8 or index == 0 or index == count - 1 or index % label_step == 0})
         years = sorted({row["fiscal_year"] for row, _ in chart_rows if row["fiscal_year"] is not None})
         subtitle = f"{years[0]}-{years[-1]}" if len(years) > 1 else (str(years[0]) if years else "年度混在")
-        charts.append({"key": metric_key, "label": metric_label, "hint": CHART_METRIC_HINTS.get(metric_key, ""), "source": source, "formula_key": metric.get("formula_key", metric_key), "type": "scatter", "type_label": CHART_TYPE_LABELS["scatter"], "subtitle": subtitle, "years": years, "x_ticks": x_ticks, "series": [{"key": "scatter", "label": "データ点", "color": "#2f6f62", "points": "", "raw_points": raw_points}], "bars": []})
+        charts.append({"key": metric_key, "label": metric_label, "hint": CHART_METRIC_HINTS.get(metric_key, ""), "source": source, "formula_key": metric.get("formula_key", metric_key), "type": "scatter", "type_label": CHART_TYPE_LABELS["scatter"], "subtitle": subtitle, "years": years, "x_ticks": x_ticks, "series": [{"key": "scatter", "label": "データ点", "color": "#2f6f62", "points": "", "raw_points": raw_points}], "bars": [], "y_ticks": _y_ticks(min_value, max_value, metric_key)})
     return charts
 
 
@@ -967,7 +987,7 @@ def bar_charts(rows: list[dict[str, Any]], metrics: list[dict[str, Any]]) -> lis
             x_ticks.append({"x": round(x, 1), "label": short_label, "show": count <= 8 or index == 0 or index == count - 1 or index % label_step == 0})
         years = sorted({row["fiscal_year"] for row, _ in chart_rows if row["fiscal_year"] is not None})
         subtitle = f"{years[0]}-{years[-1]}" if len(years) > 1 else (str(years[0]) if years else "年度混在")
-        charts.append({"key": metric_key, "label": metric_label, "hint": CHART_METRIC_HINTS.get(metric_key, ""), "source": source, "formula_key": metric.get("formula_key", metric_key), "type": "bar", "type_label": CHART_TYPE_LABELS["bar"], "subtitle": subtitle, "years": years, "x_ticks": x_ticks, "series": [], "bars": bars, "baseline": round(baseline, 1)})
+        charts.append({"key": metric_key, "label": metric_label, "hint": CHART_METRIC_HINTS.get(metric_key, ""), "source": source, "formula_key": metric.get("formula_key", metric_key), "type": "bar", "type_label": CHART_TYPE_LABELS["bar"], "subtitle": subtitle, "years": years, "x_ticks": x_ticks, "series": [], "bars": bars, "baseline": round(baseline, 1), "y_ticks": _y_ticks(min_value, max_value, metric_key)})
     return charts
 
 def build_analysis(

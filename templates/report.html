@@ -102,11 +102,14 @@
             <h3>{{ chart.label }}</h3>
             <span>{{ chart.type_label }} / {{ chart.subtitle }}</span>
           </div>
-          <svg class="trend-svg" viewBox="0 0 300 156" role="img" aria-label="{{ chart.label }}の推移">
+          <svg class="trend-svg" viewBox="-44 0 344 156" role="img" aria-label="{{ chart.label }}の推移">
             <line x1="24" y1="132" x2="276" y2="132" class="axis"></line>
             <line x1="24" y1="28" x2="24" y2="132" class="axis"></line>
             {% for grid_y in [28, 54, 80, 106, 132] %}
             <line x1="24" y1="{{ grid_y }}" x2="276" y2="{{ grid_y }}" class="grid-line"></line>
+            {% endfor %}
+            {% for tick in chart.y_ticks %}
+            <text x="20" y="{{ tick.y + 3 }}" text-anchor="end" style="fill:var(--t3);font-size:8px;font-family:var(--font-mono)">{{ tick.label }}</text>
             {% endfor %}
             {% if chart.type == "bar" %}
             <line x1="24" y1="{{ chart.baseline }}" x2="276" y2="{{ chart.baseline }}" class="zero-line"></line>

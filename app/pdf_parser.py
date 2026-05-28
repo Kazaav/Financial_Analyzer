@@ -413,7 +413,11 @@ def extract_row_from_pages(
                 continue
             window = "".join(lines[index : min(index + 4, len(lines))])
             if exact_first_line:
-                matched = line == label_parts[0]
+                # Strip leading/trailing symbols that PDF extraction may prepend/append
+                # (e.g. 「売上総利益」→ 売上総利益, （売上総利益）→ 売上総利益)
+                _stripped = re.sub(r'^[\s　「」（）()【】「」・./※＊*]+', '', line)
+                _stripped = re.sub(r'[\s　「」（）()【】「」・./※＊*]+$', '', _stripped)
+                matched = _stripped == label_parts[0]
             elif len(label_parts) == 1:
                 matched = label_parts[0] in line
             else:
@@ -612,6 +616,12 @@ def extract_metrics(pages: list[PageText], default_unit: str) -> tuple[dict[str,
             "is_ifrs": "IFRS" in picked.label or "資本合計" in picked.label or "親会社の所有者" in picked.label,
         }
         notes.append(f"{DISPLAY_NAMES[key]}: {picked.value:,.0f} ({picked.source})")
+
+    # Propagate IFRS flag at document level: if any metric matched an IFRS label,
+    # the whole document is IFRS — mark every extracted metric accordingly.
+    if any(v.get("is_ifrs") for v in sources.values()):
+        for v in sources.values():
+            v["is_ifrs"] = True
 
     essentials = ["revenue", "net_income", "total_assets", "net_assets", "operating_cash_flow"]
     found = sum(1 for key in essentials if metrics.get(key) is not None)

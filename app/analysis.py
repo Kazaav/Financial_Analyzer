@@ -848,7 +848,7 @@ def line_charts(rows: list[dict[str, Any]], metrics: list[dict[str, Any]]) -> li
         if row["fiscal_year"] is not None:
             grouped[row["company_key"]].append(row)
 
-    palette = ["#2f6f62", "#315c98", "#a0652b", "#7a5aa6", "#267789", "#9a3f36"]
+    palette = ["#3db8a0", "#4e8ee8", "#d4893a", "#9472d4", "#2cb8cc", "#d95050"]
     for metric in metrics:
         metric_key = metric["key"]
         metric_label = metric["label"]
@@ -890,7 +890,7 @@ def scatter_charts(rows: list[dict[str, Any]], metrics: list[dict[str, Any]]) ->
     if not rows:
         return []
     charts: list[dict[str, Any]] = []
-    palette = ["#2f6f62", "#315c98", "#a0652b", "#7a5aa6", "#267789", "#9a3f36", "#6b7f2a", "#9a4f73"]
+    palette = ["#3db8a0", "#4e8ee8", "#d4893a", "#9472d4", "#2cb8cc", "#d95050", "#8ab83d", "#d45e8a"]
     for metric in metrics:
         metric_key = metric["key"]
         metric_label = metric["label"]
@@ -924,7 +924,7 @@ def bar_charts(rows: list[dict[str, Any]], metrics: list[dict[str, Any]]) -> lis
     if not rows:
         return []
     charts: list[dict[str, Any]] = []
-    palette = ["#2f6f62", "#315c98", "#a0652b", "#7a5aa6", "#267789", "#9a3f36", "#6b7f2a", "#9a4f73"]
+    palette = ["#3db8a0", "#4e8ee8", "#d4893a", "#9472d4", "#2cb8cc", "#d95050", "#8ab83d", "#d45e8a"]
     for metric in metrics:
         metric_key = metric["key"]
         metric_label = metric["label"]

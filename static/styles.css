@@ -1,38 +1,38 @@
-/* Financial Analyzer · Dark Linear×Bloomberg theme · v20260526-1 */
+/* Financial Analyzer · Dark Linear×Bloomberg theme · v20260528-1 */
 
 /* ══════════════════════════════════════════════════════════════════
    1. TOKENS
    ══════════════════════════════════════════════════════════════════ */
 :root{
   /* Background layers */
-  --bg-base: #0a0d13;
-  --bg-elev-1: #11151e;
-  --bg-elev-2: #161b27;
-  --bg-elev-3: #1c2230;
+  --bg-base: #080d16;
+  --bg-elev-1: #0f1522;
+  --bg-elev-2: #141c2b;
+  --bg-elev-3: #1b2538;
 
   /* Borders */
-  --bd: #1c2230;
-  --bd-strong: #2a3142;
-  --bd-soft: #161b27;
+  --bd: #1d2739;
+  --bd-strong: #2b3851;
+  --bd-soft: #131a28;
 
   /* Text */
-  --t1: #e6e8ee;
-  --t2: #9ba3b5;
-  --t3: #6c7589;
-  --t4: #444c5e;
+  --t1: #e8edf6;
+  --t2: #a6b1c8;
+  --t3: #7d8fa8;
+  --t4: #50627a;
 
   /* Accent (Linear blue) */
-  --accent: #6ea8ff;
-  --accent-dim: rgba(110,168,255,.14);
-  --accent-strong: #4080e8;
+  --accent: #6aaaff;
+  --accent-dim: rgba(106,170,255,.14);
+  --accent-strong: #3b82f6;
 
   /* Semantic */
-  --plus: #4ade80;
-  --plus-dim: rgba(74,222,128,.12);
-  --minus: #f87171;
-  --minus-dim: rgba(248,113,113,.12);
-  --highlight: #fbbf24;
-  --highlight-dim: rgba(251,191,36,.12);
+  --plus: #34d470;
+  --plus-dim: rgba(52,212,112,.12);
+  --minus: #f96565;
+  --minus-dim: rgba(249,101,101,.12);
+  --highlight: #f0b429;
+  --highlight-dim: rgba(240,180,41,.12);
 
   /* Compatibility aliases (old code) */
   --cp: var(--accent);
@@ -53,7 +53,7 @@
   --sh-sm: 0 1px 2px rgba(0,0,0,.4);
   --sh: 0 2px 8px rgba(0,0,0,.4), 0 0 0 1px rgba(255,255,255,.02);
   --sh-md: 0 8px 24px rgba(0,0,0,.5), 0 0 0 1px rgba(255,255,255,.03);
-  --sh-glow: 0 0 0 1px rgba(110,168,255,.3), 0 0 16px rgba(110,168,255,.15);
+  --sh-glow: 0 0 0 1px rgba(106,170,255,.3), 0 0 16px rgba(106,170,255,.15);
 
   /* Fonts */
   --font-sans: "Inter", "Noto Sans JP", ui-sans-serif, system-ui, -apple-system, "Segoe UI", "Hiragino Sans", "Yu Gothic UI", Meiryo, sans-serif;
@@ -71,12 +71,12 @@ body{
   font-feature-settings:"cv11","ss01","ss02","cv02";
   min-height:100vh;
   background-image:
-    radial-gradient(circle at 0.5px 0.5px, rgba(110,168,255,0.04) 0.5px, transparent 0);
+    radial-gradient(circle at 0.5px 0.5px, rgba(106,170,255,0.04) 0.5px, transparent 0);
   background-size:32px 32px;
 }
 ul,ol{list-style:none}
 a{color:var(--accent);text-decoration:none;transition:color 120ms}
-a:hover{color:#94c0ff}
+a:hover{color:#9ac4ff}
 button,input,select,textarea{font:inherit;color:inherit}
 img,svg{display:block;max-width:100%}
 

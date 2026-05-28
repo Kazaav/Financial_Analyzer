@@ -20,12 +20,12 @@
 
   // Theme tokens (must match CSS dark theme)
   var theme = {
-    text: '#9ba3b5',
-    textBright: '#e6e8ee',
-    grid: '#1c2230',
-    bd: '#2a3142',
-    accent: '#6ea8ff',
-    palette: ['#6ea8ff', '#4ade80', '#fbbf24', '#f87171', '#c4b5fd', '#34d4be', '#fb923c', '#a78bfa'],
+    text: '#a6b1c8',
+    textBright: '#e8edf6',
+    grid: '#1b2538',
+    bd: '#2b3851',
+    accent: '#6aaaff',
+    palette: ['#6aaaff', '#34d470', '#f0b429', '#f96565', '#c4b5fd', '#2dd4bf', '#fb923c', '#a78bfa'],
   };
 
   function baseOption() {
@@ -35,7 +35,7 @@
       textStyle: { color: theme.text, fontFamily: 'Inter, "Noto Sans JP", sans-serif' },
       tooltip: {
         trigger: 'item',
-        backgroundColor: '#1c2230',
+        backgroundColor: '#1b2538',
         borderColor: theme.bd,
         borderWidth: 1,
         textStyle: { color: theme.textBright, fontSize: 12 },

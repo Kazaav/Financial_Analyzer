@@ -89,14 +89,17 @@
       </div>
     </section>
 
-    {% if analysis.trend_charts %}
+    {% if analysis.chart_categories %}
     <section class="section">
       <h2 class="section-title">推移チャート</h2>
+      {% for category in analysis.chart_categories %}
+      {% if category.charts %}
+      <h3 class="report-cat-title">{{ category.label }}</h3>
       <div class="trend-grid report-trends">
-        {% for chart in analysis.trend_charts[:4] %}
+        {% for chart in category.charts %}
         <article class="trend-card">
           <div class="trend-card-head">
-            <h3>{{ chart.label }} {{ info(chart.formula_key or chart.key) }}</h3>
+            <h3>{{ chart.label }}</h3>
             <span>{{ chart.type_label }} / {{ chart.subtitle }}</span>
           </div>
           <svg class="trend-svg" viewBox="0 0 300 156" role="img" aria-label="{{ chart.label }}の推移">
@@ -116,7 +119,7 @@
             <polyline points="{{ series.points }}" fill="none" stroke="{{ series.color }}" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"></polyline>
             {% endif %}
             {% for point in series.raw_points %}
-            <g class="trend-point" aria-label="{{ series.label }} {{ point.year }} {{ point.value|metric(chart.key) }}" data-point-tooltip="{{ series.label }} / {{ point.year }} / {{ point.value|metric(chart.key) }}">
+            <g class="trend-point">
               <circle cx="{{ point.x }}" cy="{{ point.y }}" r="4" fill="{{ point.color if point.color else series.color }}"></circle>
               <g class="point-label" transform="translate({{ point.x }}, {{ point.y }})">
                 <rect x="-58" y="-42" width="116" height="34" rx="6"></rect>
@@ -148,6 +151,8 @@
         </article>
         {% endfor %}
       </div>
+      {% endif %}
+      {% endfor %}
     </section>
     {% endif %}
 
@@ -221,6 +226,12 @@
       background:var(--bg-elev-3);padding:12px 16px;border-radius:10px;
       box-shadow:var(--sh-md);border:1px solid var(--bd);
     }
+    .report-cat-title{
+      font-size:12px;font-weight:600;letter-spacing:.04em;text-transform:uppercase;
+      color:var(--t3);margin:20px 0 8px;padding-bottom:6px;
+      border-bottom:1px solid var(--bd);
+    }
+    .info-dot{display:none !important}
     @media print{.report-actions{display:none !important}}
   </style>
 

@@ -31,7 +31,7 @@
   function baseOption() {
     return {
       backgroundColor: 'transparent',
-      grid: { left: 50, right: 18, top: 24, bottom: 36, containLabel: false },
+      grid: { left: 8, right: 8, top: 24, bottom: 36, containLabel: true },
       textStyle: { color: theme.text, fontFamily: 'Inter, "Noto Sans JP", sans-serif' },
       tooltip: {
         trigger: 'item',

@@ -17,6 +17,7 @@
     <span class="entity-code">{{ row.display_code }}</span>
     <span class="entity-name">{{ row.company_name }}</span>
     <span class="entity-year">{{ row.fiscal_year or "年度不明" }}</span>
+    {% if row.is_ifrs %}<span class="entity-ifrs">IFRS</span>{% endif %}
   {%- endmacro %}
 
   <main class="app-shell">

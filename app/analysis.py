@@ -490,6 +490,7 @@ def enrich_document(doc: FinancialDocument, company_key: str | None = None) -> d
         "unit": doc.unit,
         "metrics": m,
         "derived": derived,
+        "is_ifrs": any(v.get("is_ifrs") for v in doc.metric_sources.values()),
     }
 
 

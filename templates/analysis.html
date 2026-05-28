@@ -192,7 +192,7 @@
         <a class="button mini" href="/analysis/{{ analysis.record.id }}/export.xlsx?{{ _qs }}" download>Excel</a>
         <a class="button mini" href="/analysis/{{ analysis.record.id }}/export.json?{{ _qs }}" download>JSON</a>
       </div>
-      <button class="button" type="button" onclick="window.print()" style="width:100%">{{ t('sidebar.print') }}</button>
+      <a class="button" href="/analysis/{{ analysis.record.id }}/print?{{ _qs }}" target="_blank" rel="noopener" style="width:100%;display:block;text-align:center">{{ t('sidebar.print') }}</a>
 
       {% if not is_demo %}
       <form action="/analysis/{{ analysis.record.id }}/report" method="post">

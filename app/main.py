@@ -9,7 +9,7 @@ from uuid import uuid4
 
 import fitz  # PyMuPDF
 from fastapi import FastAPI, File, Form, HTTPException, Query, Request, UploadFile
-from fastapi.responses import FileResponse, RedirectResponse, Response
+from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
@@ -632,6 +632,30 @@ async def create_report(
     for doc_id in selected_docs:
         url += f"&selected_docs={doc_id}"
     return RedirectResponse(url=url, status_code=303)
+
+
+@app.get("/analysis/{analysis_id}/print")
+async def print_analysis(
+    analysis_id: str,
+    mode: str = Query("same_year"),
+    selected_year: str | None = Query(None),
+    selected_company: str | None = Query(None),
+    selected_docs: list[str] = Query(default=[]),
+    chart_type: str | None = Query(None),
+):
+    try:
+        record = load_record(analysis_id)
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    report_path = generate_report(
+        record,
+        mode=mode,
+        selected_year=parse_optional_int(selected_year),
+        selected_company=selected_company or None,
+        selected_doc_ids=selected_docs or None,
+        chart_type=chart_type or None,
+    )
+    return HTMLResponse(content=report_path.read_text(encoding="utf-8"))
 
 
 @app.get("/reports/{filename}")

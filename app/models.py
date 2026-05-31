@@ -56,11 +56,13 @@ class AnalysisRecord:
     id: str
     created_at: str
     documents: list[FinancialDocument]
+    title: str = ""
 
     def to_dict(self) -> dict[str, Any]:
         return {
             "id": self.id,
             "created_at": self.created_at,
+            "title": self.title,
             "documents": [doc.to_dict() for doc in self.documents],
         }
 
@@ -69,6 +71,7 @@ class AnalysisRecord:
         return cls(
             id=data["id"],
             created_at=data["created_at"],
+            title=str(data.get("title", "") or ""),
             documents=[FinancialDocument.from_dict(item) for item in data.get("documents", [])],
         )
 

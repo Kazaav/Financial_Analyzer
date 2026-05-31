@@ -49,7 +49,7 @@ from .observability import (
 from .pdf_parser import parse_pdf
 from .reporting import generate_report
 from .settings import REPORT_DIR, STATIC_DIR, TEMPLATES_DIR, UPLOAD_DIR, ensure_storage
-from .storage import list_records, load_record, save_record
+from .storage import delete_record, list_records, load_record, save_record
 
 configure_logging()
 log = get_logger()
@@ -597,6 +597,27 @@ async def update_document(request: Request, analysis_id: str, doc_id: str):
     target.extraction_notes.append("ユーザー編集により抽出値を更新しました。")
     save_record(record)
     return RedirectResponse(url=f"/analysis/{analysis_id}", status_code=303)
+
+
+@app.post("/analysis/{analysis_id}/rename")
+async def rename_analysis(request: Request, analysis_id: str, title: str = Form("")):
+    require_admin(request)
+    reject_demo_mutation(analysis_id)
+    try:
+        record = load_record(analysis_id)
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    record.title = title.strip()[:120]
+    save_record(record)
+    return RedirectResponse(url="/app", status_code=303)
+
+
+@app.post("/analysis/{analysis_id}/delete")
+async def delete_analysis(request: Request, analysis_id: str):
+    require_admin(request)
+    reject_demo_mutation(analysis_id)
+    delete_record(analysis_id)
+    return RedirectResponse(url="/app", status_code=303)
 
 
 @app.post("/analysis/{analysis_id}/report")

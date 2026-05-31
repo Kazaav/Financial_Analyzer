@@ -100,13 +100,48 @@
     </div>
     <div class="recent-list">
       {% for item in recent_records %}
-      <a class="recent-item" href="/analysis/{{ item.id }}">
-        <strong>{{ item.created_at }}</strong>
-        <div class="subline"><span>{{ item.count }} PDF</span><span>{{ item.id }}</span></div>
-      </a>
+      <div class="recent-item">
+        <a class="recent-item-main" href="/analysis/{{ item.id }}">
+          <strong>{{ item.title or item.created_at }}</strong>
+          <div class="subline"><span>{{ item.count }} PDF</span><span>{{ item.created_at }}</span></div>
+        </a>
+        {% if current_user and current_user.is_admin %}
+        <div class="recent-item-actions">
+          <button type="button" class="recent-act" title="名前を変更"
+                  data-rename-id="{{ item.id }}" data-rename-current="{{ item.title }}">名前変更</button>
+          <form method="post" action="/analysis/{{ item.id }}/delete" data-confirm-delete>
+            <button type="submit" class="recent-act danger" title="この分析を削除">削除</button>
+          </form>
+        </div>
+        {% endif %}
+      </div>
       {% endfor %}
     </div>
   </div>
+
+  <form id="rename-form" method="post" hidden>
+    <input type="hidden" name="title" id="rename-title-input">
+  </form>
+  <script>
+  (function () {
+    document.addEventListener('click', function (e) {
+      var btn = e.target.closest('[data-rename-id]');
+      if (!btn) return;
+      var current = btn.getAttribute('data-rename-current') || '';
+      var name = window.prompt('この分析の名前を入力してください', current);
+      if (name === null) return;
+      var form = document.getElementById('rename-form');
+      form.action = '/analysis/' + btn.getAttribute('data-rename-id') + '/rename';
+      document.getElementById('rename-title-input').value = name;
+      form.submit();
+    });
+    document.addEventListener('submit', function (e) {
+      if (e.target.matches('[data-confirm-delete]')) {
+        if (!window.confirm('この分析を削除しますか？この操作は取り消せません。')) e.preventDefault();
+      }
+    });
+  })();
+  </script>
   {% endif %}
 
 </div>

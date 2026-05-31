@@ -7,7 +7,10 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&family=Noto+Sans+JP:wght@400;500;600&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="/static/styles.css?v=20260527-3">
+  <script>
+  (function(){ try{ if(localStorage.getItem('fa-theme')==='light') document.documentElement.setAttribute('data-theme','light'); }catch(e){} })();
+  </script>
+  <link rel="stylesheet" href="/static/styles.css?v=20260531">
 </head>
 <body>
 
@@ -18,8 +21,8 @@
       <svg class="login-logo-svg" viewBox="0 0 36 36" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" width="36" height="36">
         <defs>
           <linearGradient id="logoG" x1="0" y1="0" x2="1" y2="1">
-            <stop offset="0%" stop-color="#6ea8ff"/>
-            <stop offset="100%" stop-color="#3a6cd0"/>
+            <stop offset="0%" stop-color="var(--accent)"/>
+            <stop offset="100%" stop-color="var(--accent-strong)"/>
           </linearGradient>
         </defs>
         <rect width="36" height="36" rx="9" fill="url(#logoG)"/>

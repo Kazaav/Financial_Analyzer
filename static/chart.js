@@ -18,15 +18,25 @@
     return Math.round(v).toLocaleString() + '百万円';
   }
 
-  // Theme tokens (must match CSS dark theme)
-  var theme = {
-    text: '#a6b1c8',
-    textBright: '#e8edf6',
-    grid: '#1b2538',
-    bd: '#2b3851',
-    accent: '#6aaaff',
-    palette: ['#6aaaff', '#34d470', '#f0b429', '#f96565', '#c4b5fd', '#2dd4bf', '#fb923c', '#a78bfa'],
-  };
+  // Theme tokens read live from CSS custom properties, so charts follow the
+  // active light/dark theme. Recomputed on 'fa-themechange'. Palette stays fixed
+  // (series identity) but is theme-agnostic enough to read on both backgrounds.
+  function cssVar(name, fallback) {
+    var v = getComputedStyle(document.documentElement).getPropertyValue(name);
+    return (v && v.trim()) || fallback;
+  }
+  function getTheme() {
+    return {
+      text: cssVar('--t3', '#7d8fa8'),
+      textBright: cssVar('--t1', '#e8edf6'),
+      grid: cssVar('--chart-grid', '#1b2538'),
+      bd: cssVar('--chart-axis', '#2b3851'),
+      accent: cssVar('--accent', '#6aaaff'),
+      elev: cssVar('--bg-elev-2', '#141c2b'),
+      palette: ['#4e8ee8', '#2faa6f', '#d4893a', '#d4564c', '#9472d4', '#1aa9b8', '#c2682f', '#7c5fc0'],
+    };
+  }
+  var theme = getTheme();
 
   function baseOption() {
     return {
@@ -35,12 +45,12 @@
       textStyle: { color: theme.text, fontFamily: 'Inter, "Noto Sans JP", sans-serif' },
       tooltip: {
         trigger: 'item',
-        backgroundColor: '#1b2538',
+        backgroundColor: theme.elev,
         borderColor: theme.bd,
         borderWidth: 1,
         textStyle: { color: theme.textBright, fontSize: 12 },
         padding: [8, 12],
-        extraCssText: 'box-shadow: 0 8px 24px rgba(0,0,0,.5); border-radius: 6px;',
+        extraCssText: 'box-shadow: 0 8px 24px rgba(0,0,0,.28); border-radius: 6px;',
       },
     };
   }
@@ -72,7 +82,7 @@
       params.forEach(function (p) {
         lines.push(
           '<span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:' + p.color + ';margin-right:6px"></span>' +
-          p.seriesName + '<span style="float:right;margin-left:18px;font-family:JetBrains Mono;color:#fff">' + fmt(p.value, payload.format) + '</span>'
+          p.seriesName + '<span style="float:right;margin-left:18px;font-family:JetBrains Mono">' + fmt(p.value, payload.format) + '</span>'
         );
       });
       return lines.join('<br>');
@@ -124,9 +134,9 @@
     };
     opt.tooltip.formatter = function (p) {
       var year = payload.years[p.dataIndex] || '';
-      return '<strong style="color:#e6e8ee">' + p.name + '</strong>' +
+      return '<strong style="font-weight:600">' + p.name + '</strong>' +
         (year ? ' / ' + year + '年度' : '') + '<br>' +
-        '<span style="font-family:JetBrains Mono;color:#fff">' + fmt(p.value, payload.format) + '</span>';
+        '<span style="font-family:JetBrains Mono">' + fmt(p.value, payload.format) + '</span>';
     };
     opt.series = [{
       type: 'bar',
@@ -160,9 +170,9 @@
     };
     opt.tooltip.formatter = function (p) {
       var pt = payload.points[p.dataIndex];
-      return '<strong style="color:#e6e8ee">' + pt.label + '</strong>' +
+      return '<strong style="font-weight:600">' + pt.label + '</strong>' +
         (pt.year ? ' / ' + pt.year + '年度' : '') + '<br>' +
-        '<span style="font-family:JetBrains Mono;color:#fff">' + fmt(pt.value, payload.format) + '</span>';
+        '<span style="font-family:JetBrains Mono">' + fmt(pt.value, payload.format) + '</span>';
     };
     opt.series = [{
       type: 'scatter', symbolSize: 14,
@@ -233,6 +243,24 @@
 
     window.addEventListener('resize', function () {
       resizeQueue.forEach(function (c) { try { c.resize(); } catch (e) {} });
+    });
+
+    // Re-theme rendered charts when the user toggles light/dark.
+    document.addEventListener('fa-themechange', function () {
+      theme = getTheme();
+      document.querySelectorAll('.echart-host').forEach(function (host) {
+        if (!host.dataset.rendered) return;
+        var inst = echarts.getInstanceByDom(host);
+        if (!inst) return;
+        var raw = host.getAttribute('data-echarts');
+        if (!raw) return;
+        var payload;
+        try { payload = JSON.parse(raw); } catch (e) { return; }
+        var opt = payload.type === 'line' ? lineOption(payload)
+          : payload.type === 'bar' ? barOption(payload)
+          : payload.type === 'scatter' ? scatterOption(payload) : null;
+        if (opt) inst.setOption(opt, true);
+      });
     });
   }
 

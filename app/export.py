@@ -35,6 +35,7 @@ def _build_rows(record: AnalysisRecord, analysis: dict[str, Any]) -> list[dict[s
             "fiscal_year": doc.fiscal_year,
             "fiscal_period": doc.fiscal_period,
             "unit": doc.unit,
+            "accounting_standard": getattr(doc, "accounting_standard", "JGAAP"),
             "confidence": doc.confidence,
         }
         # Raw metrics
@@ -128,6 +129,7 @@ def to_xlsx(payload: dict[str, Any]) -> bytes:
         ("fiscal_year", "事業年度"),
         ("fiscal_period", "事業期間"),
         ("unit", "単位"),
+        ("accounting_standard", "会計基準"),
         ("confidence", "抽出信頼度"),
     ]
     raw_cols = [(f"raw__{k}", raw_labels.get(k, k)) for k in raw_labels]

@@ -4,9 +4,13 @@ from __future__ import annotations
 import pytest
 
 from app.pdf_parser import (
+    PageText,
     clean_line,
     collect_values_after_label,
+    cross_validate,
+    detect_accounting_standard,
     detect_unit,
+    find_statement_section,
     is_parenthesized_annotation,
     is_per_unit_line,
     looks_numeric_line,
@@ -15,6 +19,12 @@ from app.pdf_parser import (
     numeric_values,
     parse_number,
 )
+
+
+def _page(page_no: int, text: str) -> PageText:
+    """Build a PageText the way extract_pdf_pages would (cleaned lines)."""
+    lines = [clean_line(ln) for ln in text.splitlines() if clean_line(ln)]
+    return PageText(page=page_no, text=text, lines=lines)
 
 
 class TestNormalize:
@@ -64,6 +74,12 @@ class TestNumericLine:
     def test_numeric_values_extract(self):
         assert numeric_values("1,234 5,678") == [1234.0, 5678.0]
         assert numeric_values("△100") == [-100.0]
+
+    def test_numeric_values_strips_fused_note_marker(self):
+        # PyMuPDF fuses a ※N footnote marker onto the value: ※4151,639 -> 151,639
+        assert numeric_values("※4151,639") == [151639.0]
+        assert numeric_values("※4 151,639") == [151639.0]
+        assert looks_numeric_line("※4151,639")
 
 
 class TestParenthesizedAnnotation:
@@ -158,3 +174,120 @@ class TestCollectValuesAfterLabel:
         """)
         values = collect_values_after_label(lines, 0, ["親会社株主に帰属する", "当期純利益"])
         assert values == [12678.0, 29411.0]
+
+
+class TestDetectAccountingStandard:
+    """Document-level JGAAP vs IFRS classification (replaces per-label guessing)."""
+
+    def test_jgaap_balance_sheet(self):
+        text = "連結貸借対照表\n資産合計\n負債合計\n純資産合計\n売上高\n経常利益"
+        assert detect_accounting_standard(text) == "JGAAP"
+
+    def test_ifrs_statement_of_financial_position(self):
+        text = "連結財政状態計算書\n非流動資産\n資本合計\n売上収益\n親会社の所有者に帰属する"
+        assert detect_accounting_standard(text) == "IFRS"
+
+    def test_transition_year_prefers_ifrs_when_both_bs_present(self):
+        # JGAAP→IFRS transition reports carry BOTH balance-sheet names; the IFRS
+        # financial-position statement plus 売上収益 wording should win.
+        text = (
+            "連結貸借対照表\n（参考）前年度\n"
+            "連結財政状態計算書\n売上収益\n親会社の所有者に帰属する\n国際会計基準に基づき作成"
+        )
+        assert detect_accounting_standard(text) == "IFRS"
+
+    def test_plain_jgaap_without_explicit_markers(self):
+        text = "連結貸借対照表\n売上高\n売上原価\n売上総利益\n営業利益\n経常利益"
+        assert detect_accounting_standard(text) == "JGAAP"
+
+
+class TestCrossValidate:
+    """Accounting-identity checks that surface silently mis-extracted values."""
+
+    def test_consistent_metrics_no_warnings(self):
+        m = {
+            "revenue": 1000.0, "operating_income": 100.0, "gross_profit": 300.0,
+            "total_assets": 2000.0, "net_assets": 800.0,
+            "current_assets": 900.0, "current_liabilities": 500.0,
+        }
+        warnings, n_checks, n_passed = cross_validate(m)
+        assert warnings == []
+        assert n_checks == 5
+        assert n_passed == 5
+
+    def test_operating_income_exceeding_revenue_is_flagged(self):
+        m = {"revenue": 1000.0, "operating_income": 5000.0}
+        warnings, n_checks, n_passed = cross_validate(m)
+        assert any("営業利益" in w for w in warnings)
+        assert n_passed < n_checks
+
+    def test_net_assets_exceeding_total_assets_is_flagged(self):
+        m = {"total_assets": 1000.0, "net_assets": 1500.0}
+        warnings, _, _ = cross_validate(m)
+        assert any("純資産" in w for w in warnings)
+
+    def test_missing_data_yields_no_applicable_checks(self):
+        warnings, n_checks, n_passed = cross_validate({"revenue": 1000.0})
+        assert warnings == []
+        assert n_checks == 0
+
+    def test_negative_operating_loss_within_revenue_ok(self):
+        # An operating loss (negative) must not trip the |op| ≤ revenue check
+        # unless its magnitude truly exceeds revenue.
+        m = {"revenue": 1000.0, "operating_income": -200.0}
+        warnings, _, n_passed = cross_validate(m)
+        assert warnings == []
+        assert n_passed == 1
+
+
+class TestFindStatementSection:
+    """Anchor-confirmed section location, robust to stray heading mentions."""
+
+    def _bs_pages(self):
+        # p1: a narrative page that merely *mentions* 連結貸借対照表 (TOC/MD&A),
+        # dozens of pages before the real statement — as in real 有報 (野村:
+        # p24 mention vs p78 statement). Filler pages keep them beyond `window`.
+        return [
+            _page(1, "事業等のリスク\n連結貸借対照表 における主要な変動について述べる"),
+            *[_page(n, "本文") for n in range(2, 40)],
+            _page(40, "連結貸借対照表\n流動資産合計 100\n資産合計 300\n"
+                      "流動負債合計 50\n負債合計 120\n純資産合計 180"),
+            _page(41, "連結損益計算書\n売上高 900"),
+        ]
+
+    def test_skips_stray_mention_picks_real_statement(self):
+        pages = self._bs_pages()
+        sec = find_statement_section(
+            pages,
+            ["連結財政状態計算書", "連結貸借対照表"],
+            ["流動資産合計", "資産合計", "負債合計", "流動負債合計"],
+            ["連結損益計算書"],
+            window=4,
+        )
+        assert 40 in [p.page for p in sec]
+        assert 1 not in [p.page for p in sec]
+
+    def test_prefers_window_with_more_anchors(self):
+        # A condensed prior-year table (2 anchors) must lose to the full
+        # statement (4 anchors) appearing later — the transition-year case.
+        pages = [
+            _page(1, "連結貸借対照表\n資産合計 250\n負債合計 100"),
+            _page(2, "中略"),
+            _page(8, "連結財政状態計算書\n流動資産合計 120\n資産合計 300\n"
+                     "流動負債合計 60\n負債合計 130"),
+        ]
+        sec = find_statement_section(
+            pages,
+            ["連結財政状態計算書", "連結貸借対照表"],
+            ["流動資産合計", "資産合計", "負債合計", "流動負債合計"],
+            window=4,
+        )
+        assert 8 in [p.page for p in sec]
+
+    def test_falls_back_when_no_anchors_present(self):
+        pages = [_page(1, "連結貸借対照表\n何らかの本文")]
+        sec = find_statement_section(
+            pages, ["連結貸借対照表"], ["流動資産合計", "資産合計"], window=4,
+        )
+        # No window clears min_confirms → fall back to first heading mention.
+        assert sec and sec[0].page == 1

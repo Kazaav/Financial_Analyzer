@@ -4,6 +4,9 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>財務分析レポート</title>
+  <script>
+  (function(){ try{ if(localStorage.getItem('fa-theme')==='light') document.documentElement.setAttribute('data-theme','light'); }catch(e){} })();
+  </script>
   <style>{{ embedded_css }}</style>
 </head>
 <body class="report-doc">
@@ -35,14 +38,14 @@
 
     <section class="kpi-strip">
       <div class="kpi">
-        <span class="kpi-label">分析対象</span>
-        <span class="kpi-value">{{ analysis.kpis.document_count }}</span>
-        <span class="kpi-note">PDF</span>
+        <span class="kpi-label">売上高合計</span>
+        <span class="kpi-value">{{ analysis.kpis.total_revenue|money_compact }}</span>
+        <span class="kpi-note">{{ analysis.kpis.document_count }} PDF · {{ analysis.kpis.year_range }}</span>
       </div>
       <div class="kpi">
-        <span class="kpi-label">企業数</span>
-        <span class="kpi-value">{{ analysis.kpis.company_count }}</span>
-        <span class="kpi-note">企業識別子基準</span>
+        <span class="kpi-label">純利益合計</span>
+        <span class="kpi-value">{{ analysis.kpis.total_net_income|money_compact }}</span>
+        <span class="kpi-note">{{ analysis.kpis.company_count }} 企業</span>
       </div>
       <div class="kpi">
         <span class="kpi-label">対象年度</span>
@@ -52,7 +55,7 @@
       <div class="kpi">
         <span class="kpi-label">抽出信頼度 {{ info("avg_confidence") }}</span>
         <span class="kpi-value">{{ (analysis.kpis.avg_confidence * 100)|number }}%</span>
-        <span class="kpi-note">主要項目</span>
+        <span class="kpi-note">主要5項目の抽出成功率</span>
       </div>
     </section>
 

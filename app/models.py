@@ -24,6 +24,7 @@ class FinancialDocument:
     metric_sources: dict[str, dict[str, Any]] = field(default_factory=dict)
     extraction_notes: list[str] = field(default_factory=list)
     confidence: float = 0.0
+    accounting_standard: str = "JGAAP"
 
     def to_dict(self) -> dict[str, Any]:
         return asdict(self)

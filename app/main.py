@@ -13,7 +13,6 @@ from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse, Resp
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
-from .ai_providers import get_ai_provider
 from .analysis import METRIC_ORDER, build_analysis
 from .auth import (
     authenticate,
@@ -336,14 +335,14 @@ def reject_demo_mutation(analysis_id: str) -> None:
 
 @app.get("/app")
 async def app_index(request: Request):
-    provider = get_ai_provider()
+    # NOTE: the AI provider hook (app/ai_providers.py) is intentionally NOT wired
+    # into the UI yet — the feature is kept dormant server-side until it is mature
+    # enough to expose. Do not surface ai_provider/ai_configured here.
     return templates.TemplateResponse(
         request,
         "index.html",
         {
             "recent_records": list_records(),
-            "ai_provider": provider.name,
-            "ai_configured": provider.is_configured(),
             "current_user": request.state.user,
         },
     )

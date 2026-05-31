@@ -31,6 +31,12 @@ DISPLAY_NAMES = {
 NUMBER_RE = re.compile(r"[△▲(（-]?\s*(?:\d{1,3}(?:,\d{3})+|\d+)(?:\.\d+)?\s*[)）]?")
 UNIT_RE = re.compile(r"[（(]\s*(百万円|千円|円|人|%|％|倍)\s*[)）]")
 EDINET_PAGE_RE = re.compile(r"\s+\d+/\d+\s*$")
+# Footnote reference markers (※1, ＊2 …) that statement tables attach to values.
+# PyMuPDF sometimes drops the space, fusing marker and number ("※4151,639"),
+# which then fails to parse. We strip 「※/＊」 plus an optional single digit; the
+# remaining "151,639" parses cleanly. Two-digit markers fused without a space are
+# vanishingly rare in the primary statements and degrade gracefully.
+NOTE_MARKER_RE = re.compile(r"[※＊*]\d?")
 
 
 @dataclass
@@ -100,7 +106,13 @@ def parse_number(token: str) -> float | None:
     return -value if negative else value
 
 
+def strip_note_markers(line: str) -> str:
+    """Remove ※N / ＊N footnote markers fused onto numeric values (see NOTE_MARKER_RE)."""
+    return NOTE_MARKER_RE.sub("", line)
+
+
 def numeric_values(line: str) -> list[float]:
+    line = strip_note_markers(line)
     values: list[float] = []
     for match in NUMBER_RE.finditer(line):
         value = parse_number(match.group(0))
@@ -149,7 +161,7 @@ def is_parenthesized_annotation(line: str) -> bool:
 
 
 def looks_numeric_line(line: str) -> bool:
-    stripped = line.strip()
+    stripped = strip_note_markers(line).strip()
     if stripped in {"-", "－"}:
         return True
     if re.fullmatch(r"[△▲(（-]?\s*\d[\d,]*(?:\.\d+)?\s*[)）]?", stripped):
@@ -494,6 +506,56 @@ def find_first_section(pages: list[PageText], starts: list[str], ends: list[str]
     return []
 
 
+def find_statement_section(
+    pages: list[PageText],
+    starts: list[str],
+    confirm_anchors: list[str],
+    ends: list[str] | None = None,
+    window: int = 4,
+    min_confirms: int = 2,
+) -> list[PageText]:
+    """Locate an actual financial-statement section, robust to stray heading mentions.
+
+    ``find_first_section`` takes the first page that merely *mentions* a heading,
+    which is easily fooled: a 有価証券報告書 name-drops 「連結貸借対照表」 in its
+    table of contents and in narrative sections (事業等のリスク, MD&A) dozens of
+    pages before the real statement. We instead require the candidate window to
+    actually contain the statement's characteristic total rows (``confirm_anchors``,
+    e.g. 流動資産合計 / 資産合計 for the B/S).
+
+    We score *every* heading occurrence by how many anchors its window contains
+    and return the best one (earliest wins ties), rather than the first that
+    merely clears ``min_confirms``. This matters in JGAAP→IFRS transition years
+    (e.g. 野村総合研究所 2021), where a condensed prior-year 連結貸借対照表 carries
+    資産合計 + 負債合計 (2 anchors) but lacks the 流動資産合計 subtotal — the real
+    IFRS 連結財政状態計算書 later in the document scores all 4 anchors and must win.
+    Falls back to ``find_first_section`` when no window clears ``min_confirms``.
+    """
+    best: list[PageText] | None = None
+    best_score = min_confirms - 1
+    for start in starts:
+        for index, page in enumerate(pages):
+            if start not in page.text:
+                continue
+            end_index = min(len(pages), index + window)
+            if ends:
+                for j in range(index + 1, min(len(pages), index + window + 3)):
+                    if any(e in pages[j].text for e in ends):
+                        end_index = j
+                        break
+            section = pages[index:end_index]
+            blob = "".join(p.text for p in section)
+            confirms = sum(1 for a in confirm_anchors if a in blob)
+            if confirms > best_score:
+                best_score = confirms
+                best = section
+                if confirms == len(confirm_anchors):
+                    return section  # perfect match — can't do better
+    if best is not None:
+        return best
+    return find_first_section(pages, starts, ends, window=window)
+
+
 def extract_metrics_from_major_indicators(pages: list[PageText]) -> dict[str, ExtractedValue]:
     # The 連結 indicators section. Search includes both the IFRS table and the JGAAP
     # historical table (both are 連結, not 提出会社). The synonym list controls which
@@ -511,23 +573,29 @@ def extract_metrics_from_major_indicators(pages: list[PageText]) -> dict[str, Ex
 
 
 def extract_metrics_from_statements(pages: list[PageText]) -> dict[str, ExtractedValue]:
-    # Balance sheet: 連結貸借対照表 (JGAAP) or 連結財政状態計算書 (IFRS)
-    bs_pages = find_first_section(
+    # Balance sheet: 連結貸借対照表 (JGAAP) or 連結財政状態計算書 (IFRS).
+    # Confirm anchors are the section's total rows, so a stray 「連結貸借対照表」
+    # mention in the TOC / narrative (which precedes the real statement by dozens
+    # of pages, e.g. 野村総合研究所) cannot hijack the locator.
+    bs_pages = find_statement_section(
         pages,
         ["連結財政状態計算書", "連結貸借対照表"],
+        ["流動資産合計", "資産合計", "負債合計", "流動負債合計"],
         ["連結損益計算書", "連結損益及び包括利益計算書", "連結包括利益計算書"],
         window=4,
     )
     # P/L: 連結損益計算書 (JGAAP) or 連結損益及び包括利益計算書 (IFRS combined)
-    pl_pages = find_first_section(
+    pl_pages = find_statement_section(
         pages,
         ["連結損益及び包括利益計算書", "連結損益計算書"],
+        ["営業利益", "営業損失", "税引前", "経常利益", "売上原価"],
         ["連結包括利益計算書", "連結キャッシュ・フロー計算書", "連結株主資本等変動計算書"],
         window=4,
     )
-    cf_pages = find_first_section(
+    cf_pages = find_statement_section(
         pages,
         ["連結キャッシュ・フロー計算書", "連結キャッシュ・フロー"],
+        ["営業活動による", "投資活動による", "財務活動による"],
         ["注記事項", "連結附属明細表"],
         window=4,
     )
@@ -582,7 +650,74 @@ def extract_metrics_from_statements(pages: list[PageText]) -> dict[str, Extracte
     return extracted
 
 
-def extract_metrics(pages: list[PageText], default_unit: str) -> tuple[dict[str, float | None], dict[str, dict[str, Any]], list[str], float]:
+def detect_accounting_standard(text: str) -> str:
+    """Classify the report as 'IFRS' or 'JGAAP' from document-level structure.
+
+    Replaces the old per-metric label guess (which mistook JGAAP 資本合計 sub-totals
+    for IFRS). The decisive signal is the balance-sheet name: IFRS filings use
+    連結財政状態計算書, JGAAP filings use 連結貸借対照表 — the two are mutually
+    exclusive in practice. When the structural marker is ambiguous we corroborate
+    with IFRS-only P/L wording (売上収益, 親会社の所有者に帰属する) and explicit
+    国際会計基準 / IFRS declarations.
+    """
+    has_ifrs_bs = "連結財政状態計算書" in text
+    has_jgaap_bs = "連結貸借対照表" in text
+    if has_ifrs_bs and not has_jgaap_bs:
+        return "IFRS"
+    if has_jgaap_bs and not has_ifrs_bs:
+        return "JGAAP"
+    score = 2 if has_ifrs_bs else 0
+    if "売上収益" in text:
+        score += 1
+    if "親会社の所有者に帰属する" in text:
+        score += 1
+    if re.search(r"国際会計基準|IFRS(?:第|に基づ|を適用|に準拠)", text):
+        score += 2
+    return "IFRS" if score >= 2 else "JGAAP"
+
+
+# Accounting identities used to cross-check extraction. Each returns one of
+# True (holds), False (violated → suspect extraction), or None (insufficient data).
+def cross_validate(metrics: dict[str, float | None]) -> tuple[list[str], int, int]:
+    """Validate extracted metrics against accounting identities.
+
+    Returns (warnings, n_applicable_checks, n_passed). A violation almost always
+    means a value was mis-extracted (wrong row / wrong column), so we surface it
+    to the user and let it lower confidence — silent-but-wrong is the worst
+    outcome for research use.
+    """
+    m = metrics
+    tol = 1.005  # 0.5% slack for rounding across 千円/百万円 conversions
+    checks: list[tuple[str, bool | None]] = []
+
+    def chk(name: str, ok: bool | None) -> None:
+        checks.append((name, ok))
+
+    rev = m.get("revenue")
+    rev_abs = abs(rev) if rev is not None else None
+    chk("営業利益 ≤ 売上高",
+        None if rev_abs is None or m.get("operating_income") is None
+        else abs(m["operating_income"]) <= rev_abs * tol)
+    chk("売上総利益 ≤ 売上高",
+        None if rev_abs is None or m.get("gross_profit") is None
+        else m["gross_profit"] <= rev_abs * tol)
+    chk("純資産 ≤ 総資産",
+        None if m.get("total_assets") is None or m.get("net_assets") is None
+        else m["net_assets"] <= m["total_assets"] * tol)
+    chk("流動資産 ≤ 総資産",
+        None if m.get("total_assets") is None or m.get("current_assets") is None
+        else m["current_assets"] <= m["total_assets"] * tol)
+    chk("流動負債 ≤ 総資産",
+        None if m.get("total_assets") is None or m.get("current_liabilities") is None
+        else m["current_liabilities"] <= m["total_assets"] * tol)
+
+    warnings = [f"会計整合性チェック要確認: {name}" for name, ok in checks if ok is False]
+    n_checks = sum(1 for _, ok in checks if ok is not None)
+    n_passed = sum(1 for _, ok in checks if ok is True)
+    return warnings, n_checks, n_passed
+
+
+def extract_metrics(pages: list[PageText], default_unit: str, standard: str = "JGAAP") -> tuple[dict[str, float | None], dict[str, dict[str, Any]], list[str], float]:
     major = extract_metrics_from_major_indicators(pages)
     statements = extract_metrics_from_statements(pages)
     metrics: dict[str, float | None] = dict.fromkeys(DISPLAY_NAMES)
@@ -612,24 +747,36 @@ def extract_metrics(pages: list[PageText], default_unit: str) -> tuple[dict[str,
             "page": picked.page,
             "raw_value": picked.value,
             "source_text": picked.source,
-            # 'is_ifrs' flag: heuristic — if the label text contains IFRS markers
-            "is_ifrs": "IFRS" in picked.label or "資本合計" in picked.label or "親会社の所有者" in picked.label,
+            # IFRS flag is now document-level (driven by detect_accounting_standard),
+            # not a per-label guess — far more reliable across statement variants.
+            "is_ifrs": standard == "IFRS",
         }
         notes.append(f"{DISPLAY_NAMES[key]}: {picked.value:,.0f} ({picked.source})")
 
-    # Propagate IFRS flag at document level: if any metric matched an IFRS label,
-    # the whole document is IFRS — mark every extracted metric accordingly.
-    if any(v.get("is_ifrs") for v in sources.values()):
-        for v in sources.values():
-            v["is_ifrs"] = True
-
+    # ── Coverage of the five essential metrics ──────────────────────────────
     essentials = ["revenue", "net_income", "total_assets", "net_assets", "operating_cash_flow"]
     found = sum(1 for key in essentials if metrics.get(key) is not None)
-    confidence = round(found / len(essentials), 2)
-    if confidence < 0.8:
+    coverage = found / len(essentials)
+
+    # ── Cross-validation against accounting identities ──────────────────────
+    val_warnings, n_checks, n_passed = cross_validate(metrics)
+    val_rate = (n_passed / n_checks) if n_checks else 1.0
+    notes.extend(val_warnings)
+
+    # Confidence blends coverage (how much we found) with validation (how much
+    # of what we found is internally consistent). Pure coverage was too coarse:
+    # a doc could score 1.0 while silently carrying a mis-extracted value.
+    confidence = round(0.75 * coverage + 0.25 * val_rate, 2)
+
+    if coverage < 0.8:
         notes.append("主要項目の抽出数が不足しています。抽出結果レビューでPDF本文と照合してください。")
+    # gross_profit absence is expected under IFRS (expense-by-nature P/L has no
+    # 売上総利益 line) — report it as N/A, not as a failed extraction.
     if metrics.get("gross_profit") is None:
-        notes.append("売上総利益は企業の表示形式により未抽出の場合があります。")
+        if standard == "IFRS":
+            notes.append("売上総利益: IFRS（費用性質法）の損益計算書では区分表示されないため非開示。")
+        else:
+            notes.append("売上総利益は企業の表示形式により未抽出の場合があります。")
     return metrics, sources, notes, confidence
 
 
@@ -641,7 +788,9 @@ def parse_pdf(path: Path, doc_id: str, original_filename: str) -> FinancialDocum
     english_name = detect_english_name(text)
     edinet_code = detect_edinet_code(text)
     security_code = detect_security_code(text, original_filename, path, company_name, english_name)
-    metrics, metric_sources, notes, confidence = extract_metrics(pages, unit)
+    standard = detect_accounting_standard(text)
+    metrics, metric_sources, notes, confidence = extract_metrics(pages, unit, standard)
+    notes.insert(0, f"会計基準: {standard}")
     if security_code:
         notes.insert(0, f"証券コード: {security_code}")
     if edinet_code:
@@ -664,4 +813,5 @@ def parse_pdf(path: Path, doc_id: str, original_filename: str) -> FinancialDocum
         metric_sources=metric_sources,
         extraction_notes=notes,
         confidence=confidence,
+        accounting_standard=standard,
     )

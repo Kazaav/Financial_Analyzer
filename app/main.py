@@ -9,6 +9,7 @@ from uuid import uuid4
 
 import fitz  # PyMuPDF
 from fastapi import FastAPI, File, Form, HTTPException, Query, Request, UploadFile
+from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
@@ -48,7 +49,15 @@ from .observability import (
 )
 from .pdf_parser import parse_pdf
 from .reporting import generate_report
-from .settings import REPORT_DIR, STATIC_DIR, TEMPLATES_DIR, UPLOAD_DIR, ensure_storage
+from .settings import (
+    MAX_FILES_PER_UPLOAD,
+    MAX_UPLOAD_MB,
+    REPORT_DIR,
+    STATIC_DIR,
+    TEMPLATES_DIR,
+    UPLOAD_DIR,
+    ensure_storage,
+)
 from .storage import delete_record, list_records, load_record, save_record
 
 configure_logging()
@@ -122,13 +131,6 @@ async def auth_and_cleanup_middleware(request: Request, call_next):
     if not request.state.user:
         return login_redirect(request)
     return await call_next(request)
-
-
-# Make t / lang available as Jinja globals via context-processor pattern.
-@app.middleware("http")
-async def inject_i18n_into_templates(request: Request, call_next):
-    response = await call_next(request)
-    return response
 
 
 # Override Jinja2Templates TemplateResponse to always inject lang and t.
@@ -301,16 +303,31 @@ async def parse_uploaded_pdfs(analysis_id: str, files: list[UploadFile]) -> list
     pdfs = [file for file in files if file.filename and file.filename.lower().endswith(".pdf")]
     if not pdfs:
         raise HTTPException(status_code=400, detail="PDFファイルを選択してください。")
+    if len(pdfs) > MAX_FILES_PER_UPLOAD:
+        raise HTTPException(
+            status_code=400,
+            detail=f"一度にアップロードできるPDFは{MAX_FILES_PER_UPLOAD}件までです。",
+        )
 
+    max_bytes = MAX_UPLOAD_MB * 1024 * 1024
     documents: list[FinancialDocument] = []
     for upload in pdfs:
+        if upload.size is not None and upload.size > max_bytes:
+            raise HTTPException(
+                status_code=413, detail=f"ファイルが大きすぎます（上限 {MAX_UPLOAD_MB}MB）。"
+            )
         original = safe_filename(upload.filename or "uploaded.pdf")
         doc_id = uuid4().hex[:10]
         stored_path = UPLOAD_DIR / f"{analysis_id}-{doc_id}-{original}"
-        stored_path.write_bytes(await upload.read())
+        data = await upload.read()
+        if len(data) > max_bytes:
+            raise HTTPException(
+                status_code=413, detail=f"ファイルが大きすぎます（上限 {MAX_UPLOAD_MB}MB）。"
+            )
+        stored_path.write_bytes(data)
         parse_start = time.perf_counter()
         try:
-            document = parse_pdf(stored_path, doc_id, original)
+            document = await run_in_threadpool(parse_pdf, stored_path, doc_id, original)
             record_parse("ok", time.perf_counter() - parse_start, document.confidence)
             log.info("pdf_parsed", extra={
                 "event": "pdf_parsed", "analysis_id": analysis_id,
@@ -392,7 +409,7 @@ async def reparse_documents(request: Request, analysis_id: str):
             reparsed.append(old_doc)
             continue
         try:
-            new_doc = parse_pdf(path, old_doc.id, old_doc.filename)
+            new_doc = await run_in_threadpool(parse_pdf, path, old_doc.id, old_doc.filename)
         except Exception as exc:
             new_doc = error_document(old_doc.id, old_doc.filename, path, str(exc))
         reparsed.append(new_doc)

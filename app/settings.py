@@ -16,6 +16,11 @@ CLEANUP_INTERVAL_SECONDS = int(os.getenv("FINANCIAL_ANALYZER_CLEANUP_INTERVAL_SE
 SESSION_MAX_AGE_SECONDS = int(os.getenv("FINANCIAL_ANALYZER_SESSION_MAX_AGE_SECONDS", str(12 * 60 * 60)))
 COOKIE_SECURE = os.getenv("FINANCIAL_ANALYZER_COOKIE_SECURE", "0").lower() in {"1", "true", "yes", "on"}
 
+# Upload / parse guard rails (override via env). Defend against OOM/DoS.
+MAX_UPLOAD_MB = int(os.getenv("FINANCIAL_ANALYZER_MAX_UPLOAD_MB", "30"))
+MAX_FILES_PER_UPLOAD = int(os.getenv("FINANCIAL_ANALYZER_MAX_FILES", "20"))
+MAX_PDF_PAGES = int(os.getenv("FINANCIAL_ANALYZER_MAX_PDF_PAGES", "400"))
+
 
 def ensure_storage() -> None:
     for path in (STORAGE_DIR, UPLOAD_DIR, REPORT_DIR, ANALYSIS_DIR):

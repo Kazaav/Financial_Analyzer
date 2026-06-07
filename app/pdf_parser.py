@@ -10,6 +10,7 @@ from typing import Any
 import fitz
 
 from .models import FinancialDocument
+from .settings import MAX_PDF_PAGES
 
 DISPLAY_NAMES = {
     "revenue": "売上高",
@@ -75,14 +76,17 @@ def clean_line(line: str) -> str:
     return line
 
 
-def extract_pdf_pages(path: Path) -> tuple[list[PageText], int]:
+def extract_pdf_pages(path: Path, max_pages: int = MAX_PDF_PAGES) -> tuple[list[PageText], int]:
     doc = fitz.open(path)
+    total_pages = doc.page_count
     pages: list[PageText] = []
     for index, page in enumerate(doc, start=1):
+        if max_pages and index > max_pages:
+            break
         text = normalize_text(page.get_text("text"))
         lines = [clean_line(line) for line in text.splitlines() if clean_line(line)]
         pages.append(PageText(page=index, text=text, lines=lines))
-    return pages, doc.page_count
+    return pages, total_pages
 
 
 def extract_pdf_text(path: Path) -> tuple[str, int]:

@@ -3,5 +3,4 @@ uvicorn
 jinja2
 python-multipart
 pymupdf
-pdfplumber
-pandas
+openpyxl

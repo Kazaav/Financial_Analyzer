@@ -3,6 +3,7 @@ from __future__ import annotations
 import base64
 import hashlib
 import hmac
+import logging
 import os
 import secrets
 import time
@@ -15,11 +16,18 @@ from fastapi.responses import RedirectResponse, Response
 from .settings import COOKIE_SECURE, SESSION_MAX_AGE_SECONDS
 
 SESSION_COOKIE = "financial_analyzer_session"
-DEFAULT_USERS = (
-    "zekkx:admin:pbkdf2_sha256$260000$DgpWnsn44Eot6gOuFXVS6g$Yg4J63AmftT9OrHM2uv_AKjvtkg3UCzm9mwzixDafto;"
-    "guest001:guest:pbkdf2_sha256$260000$dxjHe-Rt_ouv-WNbwDwbvg$kKYvvUclYME2TZXmGVnbwTyNYwbaYkh18V2Ns9j2VCg"
-)
-SESSION_SECRET = os.getenv("FINANCIAL_ANALYZER_SESSION_SECRET") or secrets.token_urlsafe(48)
+# No credentials are baked into the source. Provide users via the
+# FINANCIAL_ANALYZER_USERS env var, formatted as:
+#   "username:role:pbkdf2_sha256$<iter>$<salt>$<b64hash>;user2:role2:..."
+# With this unset, nobody can log in (fail closed).
+DEFAULT_USERS = ""
+SESSION_SECRET = os.getenv("FINANCIAL_ANALYZER_SESSION_SECRET")
+if not SESSION_SECRET:
+    logging.getLogger("financial_analyzer").warning(
+        "FINANCIAL_ANALYZER_SESSION_SECRET is unset; using an ephemeral secret. "
+        "Sessions will not survive a restart — set it in production."
+    )
+    SESSION_SECRET = secrets.token_urlsafe(48)
 
 
 @dataclass(frozen=True)

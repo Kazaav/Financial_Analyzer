@@ -10,7 +10,7 @@ from uuid import uuid4
 import fitz  # PyMuPDF
 from fastapi import FastAPI, File, Form, HTTPException, Query, Request, UploadFile
 from fastapi.concurrency import run_in_threadpool
-from fastapi.responses import FileResponse, HTMLResponse, RedirectResponse, Response
+from fastapi.responses import RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
@@ -24,7 +24,6 @@ from .auth import (
     set_login_cookie,
 )
 from .cleanup import is_demo_id, maybe_cleanup_expired_storage
-from .export import build_export_payload, build_filename, to_csv, to_json, to_xlsx
 from .formatting import (
     fmt_metric,
     fmt_money,
@@ -48,11 +47,9 @@ from .observability import (
     record_parse,
 )
 from .pdf_parser import parse_pdf
-from .reporting import generate_report
 from .settings import (
     MAX_FILES_PER_UPLOAD,
     MAX_UPLOAD_MB,
-    REPORT_DIR,
     STATIC_DIR,
     TEMPLATES_DIR,
     UPLOAD_DIR,
@@ -426,7 +423,6 @@ def _render_analysis_page(
     selected_company: str | None,
     selected_docs: list[str],
     chart_type: str | None,
-    report_file: str | None,
     added: str | None,
     reparsed: str | None,
     deleted: str | None,
@@ -452,7 +448,6 @@ def _render_analysis_page(
         "analysis.html",
         {
             "analysis": analysis,
-            "report_file": report_file,
             "added": added,
             "reparsed": reparsed,
             "deleted": deleted,
@@ -472,7 +467,6 @@ async def analysis_page(
     selected_company: str | None = Query(None),
     selected_docs: list[str] = Query(default=[]),
     chart_type: str | None = Query(None),
-    report_file: str | None = Query(None),
     added: str | None = Query(None),
     reparsed: str | None = Query(None),
     deleted: str | None = Query(None),
@@ -485,7 +479,6 @@ async def analysis_page(
         selected_company,
         selected_docs,
         chart_type,
-        report_file,
         added,
         reparsed,
         deleted,
@@ -530,7 +523,6 @@ async def demo_page(
         resolved_company,
         resolved_doc_ids,
         chart_type,
-        report_file=None,
         added=None,
         reparsed=None,
         deleted=None,
@@ -635,156 +627,6 @@ async def delete_analysis(request: Request, analysis_id: str):
     reject_demo_mutation(analysis_id)
     delete_record(analysis_id)
     return RedirectResponse(url="/app", status_code=303)
-
-
-@app.post("/analysis/{analysis_id}/report")
-async def create_report(
-    analysis_id: str,
-    mode: str = Form("same_year"),
-    selected_year: str | None = Form(None),
-    selected_company: str | None = Form(None),
-    selected_docs: list[str] = Form(default=[]),
-    chart_type: str | None = Form(None),
-):
-    try:
-        record = load_record(analysis_id)
-    except FileNotFoundError as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
-
-    report_path = generate_report(
-        record,
-        mode=mode,
-        selected_year=parse_optional_int(selected_year),
-        selected_company=selected_company,
-        selected_doc_ids=selected_docs,
-        chart_type=chart_type,
-    )
-    url = f"/analysis/{analysis_id}?mode={mode}&report_file={report_path.name}"
-    if selected_year:
-        url += f"&selected_year={selected_year}"
-    if selected_company:
-        url += f"&selected_company={selected_company}"
-    if chart_type:
-        url += f"&chart_type={chart_type}"
-    for doc_id in selected_docs:
-        url += f"&selected_docs={doc_id}"
-    return RedirectResponse(url=url, status_code=303)
-
-
-@app.get("/analysis/{analysis_id}/print")
-async def print_analysis(
-    analysis_id: str,
-    mode: str = Query("same_year"),
-    selected_year: str | None = Query(None),
-    selected_company: str | None = Query(None),
-    selected_docs: list[str] = Query(default=[]),
-    chart_type: str | None = Query(None),
-):
-    try:
-        record = load_record(analysis_id)
-    except FileNotFoundError as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
-    report_path = generate_report(
-        record,
-        mode=mode,
-        selected_year=parse_optional_int(selected_year),
-        selected_company=selected_company or None,
-        selected_doc_ids=selected_docs or None,
-        chart_type=chart_type or None,
-    )
-    return HTMLResponse(content=report_path.read_text(encoding="utf-8"))
-
-
-@app.get("/reports/{filename}")
-async def download_report(filename: str):
-    path = REPORT_DIR / Path(filename).name
-    if not path.exists():
-        raise HTTPException(status_code=404, detail="report not found")
-    return FileResponse(path, media_type="text/html", filename=path.name)
-
-
-def _build_export_for(
-    analysis_id: str,
-    mode: str,
-    selected_year: str | None,
-    selected_company: str | None,
-    selected_docs: list[str],
-    chart_type: str | None,
-):
-    try:
-        record = load_record(analysis_id)
-    except FileNotFoundError as exc:
-        raise HTTPException(status_code=404, detail=str(exc)) from exc
-    analysis = build_analysis(
-        record,
-        mode=mode,
-        selected_year=parse_optional_int(selected_year),
-        selected_company=selected_company,
-        selected_doc_ids=selected_docs,
-        chart_type=chart_type,
-    )
-    payload = build_export_payload(record, analysis)
-    return record, payload
-
-
-@app.get("/analysis/{analysis_id}/export.csv")
-async def export_csv(
-    analysis_id: str,
-    mode: str = Query("same_year"),
-    selected_year: str | None = Query(None),
-    selected_company: str | None = Query(None),
-    selected_docs: list[str] = Query(default=[]),
-    chart_type: str | None = Query(None),
-):
-    record, payload = _build_export_for(analysis_id, mode, selected_year, selected_company, selected_docs, chart_type)
-    body = to_csv(payload).encode("utf-8")
-    filename = build_filename(record, mode, "csv")
-    return Response(
-        content=body,
-        media_type="text/csv; charset=utf-8",
-        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
-    )
-
-
-@app.get("/analysis/{analysis_id}/export.json")
-async def export_json(
-    analysis_id: str,
-    mode: str = Query("same_year"),
-    selected_year: str | None = Query(None),
-    selected_company: str | None = Query(None),
-    selected_docs: list[str] = Query(default=[]),
-    chart_type: str | None = Query(None),
-):
-    record, payload = _build_export_for(analysis_id, mode, selected_year, selected_company, selected_docs, chart_type)
-    body = to_json(payload).encode("utf-8")
-    filename = build_filename(record, mode, "json")
-    return Response(
-        content=body,
-        media_type="application/json; charset=utf-8",
-        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
-    )
-
-
-@app.get("/analysis/{analysis_id}/export.xlsx")
-async def export_xlsx(
-    analysis_id: str,
-    mode: str = Query("same_year"),
-    selected_year: str | None = Query(None),
-    selected_company: str | None = Query(None),
-    selected_docs: list[str] = Query(default=[]),
-    chart_type: str | None = Query(None),
-):
-    record, payload = _build_export_for(analysis_id, mode, selected_year, selected_company, selected_docs, chart_type)
-    try:
-        body = to_xlsx(payload)
-    except ImportError as exc:
-        raise HTTPException(status_code=500, detail=f"openpyxl is required for xlsx export: {exc}") from exc
-    filename = build_filename(record, mode, "xlsx")
-    return Response(
-        content=body,
-        media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
-    )
 
 
 @app.get("/source-page/{analysis_id}/{doc_id}/{page}.png")

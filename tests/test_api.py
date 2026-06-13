@@ -97,29 +97,6 @@ class TestDemo:
         assert resp.status_code == 404
 
 
-class TestExport:
-    def test_csv_export(self, client, demo_record):
-        resp = client.get(f"/analysis/{demo_record.id}/export.csv?mode=same_year")
-        assert resp.status_code == 200
-        assert resp.headers["content-type"].startswith("text/csv")
-        body = resp.content.decode("utf-8")
-        assert body.startswith("﻿")  # BOM
-        assert "Test Corp" in body
-
-    def test_json_export(self, client, demo_record):
-        resp = client.get(f"/analysis/{demo_record.id}/export.json?mode=same_year")
-        assert resp.status_code == 200
-        data = resp.json()
-        assert data["analysis_id"] == demo_record.id
-        assert len(data["rows"]) == 1
-        assert data["rows"][0]["company_name"] == "Test Corp"
-
-    def test_xlsx_export(self, client, demo_record):
-        resp = client.get(f"/analysis/{demo_record.id}/export.xlsx?mode=same_year")
-        assert resp.status_code == 200
-        assert resp.content[:2] == b"PK"
-
-
 class TestLoginFlow:
     def test_wrong_password(self, client):
         resp = client.post("/login", data={"username": "admin", "password": "wrong"})

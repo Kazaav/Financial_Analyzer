@@ -19,7 +19,7 @@
     });
   })();
   </script>
-  <link rel="stylesheet" href="/static/styles.css?v=20260531">
+  <link rel="stylesheet" href="/static/styles.css?v=20260613b">
 </head>
 <body>
 {% macro info(key) -%}
@@ -190,35 +190,6 @@
     <!-- Footer actions -->
     <div class="sidebar-foot">
 
-      {# Build a query-string reflecting current filter state, used by export links #}
-      {%- set _params = [] -%}
-      {%- if analysis.mode %}{% set _ = _params.append('mode=' ~ analysis.mode) %}{% endif -%}
-      {%- if analysis.selected_year %}{% set _ = _params.append('selected_year=' ~ analysis.selected_year) %}{% endif -%}
-      {%- if analysis.selected_company %}{% set _ = _params.append('selected_company=' ~ analysis.selected_company) %}{% endif -%}
-      {%- if analysis.chart_type %}{% set _ = _params.append('chart_type=' ~ analysis.chart_type) %}{% endif -%}
-      {%- for doc_id in analysis.selected_doc_ids %}{% set _ = _params.append('selected_docs=' ~ doc_id) %}{% endfor -%}
-      {%- set _qs = _params|join('&') -%}
-
-      <div class="sidebar-foot-label">{{ t('sidebar.export') }}</div>
-      <div class="export-grid">
-        <a class="button mini" href="/analysis/{{ analysis.record.id }}/export.csv?{{ _qs }}" download>CSV</a>
-        <a class="button mini" href="/analysis/{{ analysis.record.id }}/export.xlsx?{{ _qs }}" download>Excel</a>
-        <a class="button mini" href="/analysis/{{ analysis.record.id }}/export.json?{{ _qs }}" download>JSON</a>
-      </div>
-      <a class="button" href="/analysis/{{ analysis.record.id }}/print?{{ _qs }}" target="_blank" rel="noopener" style="width:100%;display:block;text-align:center">{{ t('sidebar.print') }}</a>
-
-      {% if not is_demo %}
-      <form action="/analysis/{{ analysis.record.id }}/report" method="post">
-        <input type="hidden" name="mode" value="{{ analysis.mode }}">
-        <input type="hidden" name="selected_year" value="{{ analysis.selected_year or '' }}">
-        <input type="hidden" name="selected_company" value="{{ analysis.selected_company or '' }}">
-        <input type="hidden" name="chart_type" value="{{ analysis.chart_type }}">
-        {% for doc_id in analysis.selected_doc_ids %}
-        <input type="hidden" name="selected_docs" value="{{ doc_id }}">
-        {% endfor %}
-        <button class="button primary" type="submit" style="width:100%">{{ t('sidebar.report') }}</button>
-      </form>
-      {% endif %}
       {% if current_user and current_user.is_admin and not is_demo %}
       <form action="/analysis/{{ analysis.record.id }}/reparse" method="post">
         <button class="button" type="submit" style="width:100%">全PDF再解析</button>
@@ -303,11 +274,6 @@
 
 
     <!-- Flash notices -->
-    {% if report_file %}
-    <div style="padding:0 24px;padding-top:14px">
-      <div class="notice">レポートを生成しました。<a href="/reports/{{ report_file }}">HTMLレポートをダウンロード</a></div>
-    </div>
-    {% endif %}
     {% if added %}
     <div style="padding:0 24px;padding-top:14px">
       <div class="notice">{{ added }}件のPDFを追加しました。</div>
@@ -341,7 +307,7 @@
           </span>
           {% if analysis.kpis.revenue_spark %}
           <svg class="kpi-spark" viewBox="0 0 80 28" preserveAspectRatio="none">
-            <polyline points="{{ analysis.kpis.revenue_spark }}" fill="none" stroke="#6ea8ff" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+            <polyline points="{{ analysis.kpis.revenue_spark }}" fill="none" style="stroke:var(--accent)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
           </svg>
           {% endif %}
         </div>
@@ -358,7 +324,7 @@
           </span>
           {% if analysis.kpis.net_income_spark %}
           <svg class="kpi-spark" viewBox="0 0 80 28" preserveAspectRatio="none">
-            <polyline points="{{ analysis.kpis.net_income_spark }}" fill="none" stroke="#4ade80" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
+            <polyline points="{{ analysis.kpis.net_income_spark }}" fill="none" style="stroke:var(--plus)" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/>
           </svg>
           {% endif %}
         </div>
@@ -818,7 +784,7 @@
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js"></script>
-<script src="/static/chart.js?v=20260531"></script>
-<script src="/static/uploader.js?v=20260531"></script>
+<script src="/static/chart.js?v=20260613b"></script>
+<script src="/static/uploader.js?v=20260613b"></script>
 </body>
 </html>

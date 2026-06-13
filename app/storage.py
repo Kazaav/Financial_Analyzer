@@ -25,13 +25,17 @@ def load_record(analysis_id: str) -> AnalysisRecord:
     return AnalysisRecord.from_dict(data)
 
 
-def list_records(limit: int = 12, include_demo: bool = False) -> list[dict[str, str]]:
+def list_records(
+    limit: int = 12, include_demo: bool = False, owner: str | None = None, is_admin: bool = False
+) -> list[dict[str, str]]:
     ensure_storage()
     rows: list[dict[str, str]] = []
     for path in sorted(Path(ANALYSIS_DIR).glob("*.json"), key=lambda p: p.stat().st_mtime, reverse=True):
         if not include_demo and is_demo_id(path.stem):
             continue
         data = json.loads(path.read_text(encoding="utf-8"))
+        if not is_admin and data.get("owner", "") != (owner or ""):
+            continue
         rows.append(
             {
                 "id": data["id"],
@@ -87,4 +91,51 @@ def delete_record(analysis_id: str) -> bool:
 
     path.unlink()
     return True
+
+
+def can_access(record: AnalysisRecord, user) -> bool:
+    """Accessible if it's a demo record, the user is admin, or the user owns it."""
+    if is_demo_id(record.id):
+        return True
+    if getattr(user, "is_admin", False):
+        return True
+    return record.owner == getattr(user, "username", None)
+
+
+def count_owned(owner: str) -> int:
+    ensure_storage()
+    n = 0
+    for path in Path(ANALYSIS_DIR).glob("*.json"):
+        if is_demo_id(path.stem):
+            continue
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError):
+            continue
+        if data.get("owner", "") == owner:
+            n += 1
+    return n
+
+
+def owned_storage_bytes(owner: str) -> int:
+    """Total bytes of uploaded PDFs across the owner's (non-demo) analyses."""
+    ensure_storage()
+    ids: list[str] = []
+    for path in Path(ANALYSIS_DIR).glob("*.json"):
+        if is_demo_id(path.stem):
+            continue
+        try:
+            data = json.loads(path.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError):
+            continue
+        if data.get("owner", "") == owner:
+            ids.append(data["id"])
+    total = 0
+    for up in Path(UPLOAD_DIR).glob("*"):
+        if any(up.name.startswith(f"{aid}-") for aid in ids):
+            try:
+                total += up.stat().st_size
+            except OSError:
+                pass
+    return total
 

@@ -10,7 +10,7 @@
   <script>
   (function(){ try{ if(localStorage.getItem('fa-theme')==='light') document.documentElement.setAttribute('data-theme','light'); }catch(e){} })();
   </script>
-  <link rel="stylesheet" href="/static/styles.css?v=20260613b">
+  <link rel="stylesheet" href="/static/styles.css?v=20260614a">
 </head>
 <body>
 
@@ -56,7 +56,8 @@
       <button class="button primary login-button" type="submit">ログイン</button>
     </form>
 
-    <div style="margin-top:20px;text-align:center">
+    <div style="margin-top:20px;text-align:center;display:grid;gap:8px">
+      <a href="/register" style="font-size:13px;color:var(--accent)">{{ t('register.title', '新規登録') }}</a>
       <a href="/" style="font-size:12px;color:var(--t3)">← トップに戻る</a>
     </div>
 

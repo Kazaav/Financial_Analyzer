@@ -19,7 +19,7 @@
     });
   })();
   </script>
-  <link rel="stylesheet" href="/static/styles.css?v=20260613b">
+  <link rel="stylesheet" href="/static/styles.css?v=20260614a">
 </head>
 <body>
 <div class="home-wrap">
@@ -32,6 +32,8 @@
     <div class="top-nav-actions">
       <a class="button ghost" href="/">← トップ</a>
       <span class="user-chip">{{ current_user.username }} / {{ current_user.role }}</span>
+      <a class="button ghost" href="/account">{{ t('nav.account', 'アカウント') }}</a>
+      {% if current_user.is_admin %}<a class="button ghost" href="/admin/users">{{ t('nav.admin', 'ユーザー管理') }}</a>{% endif %}
       <a class="button ghost" href="/logout">ログアウト</a>
       <button class="theme-toggle" type="button" data-theme-toggle aria-label="テーマ切替" title="ライト / ダーク切替">
         <svg class="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>
@@ -49,6 +51,7 @@
       </div>
 
       <form action="/upload" method="post" enctype="multipart/form-data">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
         <input class="file-input-native" type="file" name="files" accept="application/pdf,.pdf" multiple data-file-input>
 
         <div class="upload-zone" data-drop-zone>
@@ -105,11 +108,12 @@
           <strong>{{ item.title or item.created_at }}</strong>
           <div class="subline"><span>{{ item.count }} PDF</span><span>{{ item.created_at }}</span></div>
         </a>
-        {% if current_user and current_user.is_admin %}
+        {% if current_user %}
         <div class="recent-item-actions">
           <button type="button" class="recent-act" title="名前を変更"
                   data-rename-id="{{ item.id }}" data-rename-current="{{ item.title }}">名前変更</button>
           <form method="post" action="/analysis/{{ item.id }}/delete" data-confirm-delete>
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
             <button type="submit" class="recent-act danger" title="この分析を削除">削除</button>
           </form>
         </div>
@@ -120,6 +124,7 @@
   </div>
 
   <form id="rename-form" method="post" hidden>
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
     <input type="hidden" name="title" id="rename-title-input">
   </form>
   <script>
@@ -145,6 +150,6 @@
   {% endif %}
 
 </div>
-<script src="/static/uploader.js?v=20260613b"></script>
+<script src="/static/uploader.js?v=20260614a"></script>
 </body>
 </html>

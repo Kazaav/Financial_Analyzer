@@ -1,0 +1,81 @@
+<!DOCTYPE html>
+<html lang="{{ lang or 'ja' }}">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{{ t('register.title', '新規登録') }} · Financial Analyzer</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&family=Noto+Sans+JP:wght@400;500;600&display=swap" rel="stylesheet">
+  <script>
+  (function(){ try{ if(localStorage.getItem('fa-theme')==='light') document.documentElement.setAttribute('data-theme','light'); }catch(e){} })();
+  </script>
+  <link rel="stylesheet" href="/static/styles.css?v=20260614a">
+</head>
+<body>
+
+<div class="login-shell">
+  <div class="login-panel">
+
+    <div class="login-brand-block">
+      <svg class="login-logo-svg" viewBox="0 0 36 36" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" width="36" height="36">
+        <defs>
+          <linearGradient id="logoG" x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0%" stop-color="var(--accent)"/>
+            <stop offset="100%" stop-color="var(--accent-strong)"/>
+          </linearGradient>
+        </defs>
+        <rect width="36" height="36" rx="9" fill="url(#logoG)"/>
+        <rect x="8" y="11" width="12" height="2" rx="1" fill="white"/>
+        <rect x="8" y="16" width="20" height="2" rx="1" fill="white"/>
+        <rect x="8" y="21" width="16" height="2" rx="1" fill="white"/>
+      </svg>
+      <div>
+        <p class="eyebrow">Financial Analyzer</p>
+        <h1 class="brand">{{ t('register.title', '新規登録') }}</h1>
+      </div>
+    </div>
+
+    {% if error %}
+    <div class="notice warn login-error" role="alert">{{ error }}</div>
+    {% endif %}
+
+    <form class="login-form" action="/register" method="post">
+      <div class="field">
+        <label for="code">{{ t('register.invite_code', '招待コード') }}</label>
+        <input type="text" id="code" name="code" value="{{ code or '' }}" required autofocus
+               autocomplete="off" autocapitalize="off" spellcheck="false">
+      </div>
+      <div class="field">
+        <label for="username">{{ t('register.username', 'ユーザー名') }}</label>
+        <input type="text" id="username" name="username" value="{{ username or '' }}"
+               autocomplete="username" autocapitalize="off" spellcheck="false" required>
+      </div>
+      <div class="field">
+        <label for="display_name">{{ t('register.display_name', '表示名（任意）') }}</label>
+        <input type="text" id="display_name" name="display_name" value="{{ display_name or '' }}">
+      </div>
+      <div class="field">
+        <label for="email">{{ t('register.email', 'メール（任意）') }}</label>
+        <input type="email" id="email" name="email" value="{{ email or '' }}" autocomplete="email">
+      </div>
+      <div class="field">
+        <label for="password">{{ t('register.password', 'パスワード') }}</label>
+        <input type="password" id="password" name="password" autocomplete="new-password" required>
+      </div>
+      <div class="field">
+        <label for="confirm">{{ t('register.confirm', 'パスワード（確認）') }}</label>
+        <input type="password" id="confirm" name="confirm" autocomplete="new-password" required>
+      </div>
+      <button class="button primary login-button" type="submit">{{ t('register.submit', '登録') }}</button>
+    </form>
+
+    <div style="margin-top:20px;text-align:center">
+      <a href="/login" style="font-size:12px;color:var(--t3)">{{ t('register.has_account', 'すでにアカウントをお持ちですか？ ログイン') }}</a>
+    </div>
+
+  </div>
+</div>
+
+</body>
+</html>

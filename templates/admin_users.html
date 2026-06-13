@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="{{ lang or 'ja' }}">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{{ t('admin.title', 'ユーザー管理') }} · Financial Analyzer</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&family=Noto+Sans+JP:wght@400;500;600&display=swap" rel="stylesheet">
+  <script>
+  (function(){
+    try{ if(localStorage.getItem('fa-theme')==='light') document.documentElement.setAttribute('data-theme','light'); }catch(e){}
+    document.addEventListener('click',function(e){
+      var b=e.target.closest&&e.target.closest('[data-theme-toggle]'); if(!b)return;
+      var d=document.documentElement, light=d.getAttribute('data-theme')==='light';
+      if(light){d.removeAttribute('data-theme');} else {d.setAttribute('data-theme','light');}
+      try{ localStorage.setItem('fa-theme', light?'dark':'light'); }catch(e){}
+      document.dispatchEvent(new CustomEvent('fa-themechange'));
+    });
+  })();
+  </script>
+  <link rel="stylesheet" href="/static/styles.css?v=20260614a">
+</head>
+<body>
+<div class="home-wrap">
+
+  <header class="top-nav">
+    <div class="top-nav-brand">
+      <h1>{{ t('admin.title', 'ユーザー管理') }}</h1>
+      <p>{{ users|length }} {{ t('admin.users', 'ユーザー') }}</p>
+    </div>
+    <div class="top-nav-actions">
+      <a class="button ghost" href="/app">← {{ t('nav.app', 'アプリ') }}</a>
+      <a class="button ghost" href="/account">{{ t('nav.account', 'アカウント') }}</a>
+      <a class="button ghost" href="/logout">{{ t('nav.logout', 'ログアウト') }}</a>
+      <button class="theme-toggle" type="button" data-theme-toggle aria-label="テーマ切替" title="ライト / ダーク切替">
+        <svg class="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>
+        <svg class="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v1.5M12 20.5V22M3.5 12H2M22 12h-1.5M5.6 5.6 4.5 4.5M19.5 19.5l-1.1-1.1M18.4 5.6l1.1-1.1M4.5 19.5l1.1-1.1"/></svg>
+      </button>
+    </div>
+  </header>
+
+  {% if new_invite %}
+  <div class="notice">{{ t('admin.invite_created', '招待コードを作成しました：') }}
+    <strong style="font-family:var(--font-mono)">{{ new_invite }}</strong>
+    &nbsp;·&nbsp; <a href="/register?code={{ new_invite }}">/register?code={{ new_invite }}</a></div>
+  {% endif %}
+  {% if new_password %}
+  <div class="notice warn">{{ t('admin.password_reset_shown', '新しいパスワード（この画面でのみ表示）：') }}
+    <strong style="font-family:var(--font-mono)">{{ new_password }}</strong></div>
+  {% endif %}
+
+  <div class="panel pad" style="margin-bottom:16px">
+    <h2 style="font-size:15px;font-weight:600;margin-bottom:14px">{{ t('admin.invites', '招待コード') }}</h2>
+    <form action="/admin/invites" method="post" style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap;margin-bottom:16px">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <div class="field"><label>{{ t('admin.role', 'ロール') }}</label>
+        <select name="role"><option value="user">user</option><option value="admin">admin</option></select></div>
+      <div class="field"><label>{{ t('admin.max_uses', '使用回数') }}</label>
+        <input type="number" name="max_uses" value="1" min="1" style="width:96px"></div>
+      <button class="button primary" type="submit">{{ t('admin.generate_invite', 'コード生成') }}</button>
+    </form>
+    <div class="table-wrap"><table class="data-table">
+      <thead><tr><th>code</th><th>{{ t('admin.role', 'ロール') }}</th><th class="num">uses</th>
+        <th>{{ t('admin.status', '状態') }}</th><th></th></tr></thead>
+      <tbody>
+      {% for inv in invites %}
+        <tr>
+          <td style="font-family:var(--font-mono)">{{ inv['code'] }}</td>
+          <td>{{ inv['role'] }}</td>
+          <td class="num">{{ inv['uses'] }}/{{ inv['max_uses'] }}</td>
+          <td>{% if inv['revoked'] %}revoked{% elif inv['uses'] >= inv['max_uses'] %}used{% else %}<span class="stat-chip">active</span>{% endif %}</td>
+          <td>{% if not inv['revoked'] and inv['uses'] < inv['max_uses'] %}
+            <form action="/admin/invites/{{ inv['code'] }}/revoke" method="post" style="display:inline">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+              <button class="button mini danger" type="submit">{{ t('admin.revoke', '無効化') }}</button></form>{% endif %}</td>
+        </tr>
+      {% else %}<tr><td colspan="5" class="muted">—</td></tr>{% endfor %}
+      </tbody></table></div>
+  </div>
+
+  <div class="panel pad">
+    <h2 style="font-size:15px;font-weight:600;margin-bottom:14px">{{ t('admin.users', 'ユーザー') }}</h2>
+    <div class="table-wrap"><table class="data-table">
+      <thead><tr>
+        <th>{{ t('register.username', 'ユーザー名') }}</th><th>{{ t('admin.role', 'ロール') }}</th>
+        <th>{{ t('admin.status', '状態') }}</th><th>{{ t('account.email', 'メール') }}</th>
+        <th>{{ t('admin.last_login', '最終ログイン') }}</th><th>{{ t('admin.actions', '操作') }}</th>
+      </tr></thead>
+      <tbody>
+      {% for u in users %}
+        <tr>
+          <td><strong>{{ u['username'] }}</strong>
+            {% if u['display_name'] and u['display_name'] != u['username'] %}<div class="muted">{{ u['display_name'] }}</div>{% endif %}</td>
+          <td>{{ u['role'] }}</td>
+          <td>{% if u['status'] == 'active' %}<span class="stat-chip">active</span>{% else %}<span class="stat-chip" style="color:var(--minus)">disabled</span>{% endif %}</td>
+          <td class="muted">{{ u['email'] }}</td>
+          <td class="muted" style="font-family:var(--font-mono);font-size:11px">{{ u['last_login_at'] or '—' }}</td>
+          <td>
+            <div style="display:flex;gap:5px;flex-wrap:wrap">
+              <form action="/admin/users/{{ u['username'] }}/status" method="post" style="display:inline">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                <input type="hidden" name="status" value="{{ 'active' if u['status'] != 'active' else 'disabled' }}">
+                <button class="button mini" type="submit">{{ t('admin.enable', '有効化') if u['status'] != 'active' else t('admin.disable', '無効化') }}</button>
+              </form>
+              <form action="/admin/users/{{ u['username'] }}/role" method="post" style="display:inline">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                <input type="hidden" name="role" value="{{ 'user' if u['role'] == 'admin' else 'admin' }}">
+                <button class="button mini" type="submit">{{ t('admin.make_user', '一般化') if u['role'] == 'admin' else t('admin.make_admin', '管理者化') }}</button>
+              </form>
+              <form action="/admin/users/{{ u['username'] }}/reset-password" method="post" style="display:inline">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                <button class="button mini" type="submit">{{ t('admin.reset_password', 'PW再発行') }}</button>
+              </form>
+              <form action="/admin/users/{{ u['username'] }}/delete" method="post" style="display:inline"
+                    onsubmit="return confirm('{{ t('admin.delete_confirm_js', 'このユーザーと全データを削除しますか？') }}')">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                <button class="button mini danger" type="submit">{{ t('admin.delete', '削除') }}</button>
+              </form>
+            </div>
+          </td>
+        </tr>
+      {% endfor %}
+      </tbody></table></div>
+  </div>
+
+</div>
+</body>
+</html>

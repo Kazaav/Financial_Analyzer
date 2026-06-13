@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import re
+import secrets
 import time
 from datetime import datetime
 from pathlib import Path
@@ -8,20 +9,26 @@ from urllib.parse import urlencode
 from uuid import uuid4
 
 import fitz  # PyMuPDF
-from fastapi import FastAPI, File, Form, HTTPException, Query, Request, UploadFile
+from fastapi import Depends, FastAPI, File, Form, HTTPException, Query, Request, UploadFile
 from fastapi.concurrency import run_in_threadpool
 from fastapi.responses import RedirectResponse, Response
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 
+from . import db, ratelimit
 from .analysis import METRIC_ORDER, build_analysis
 from .auth import (
     authenticate,
+    bootstrap_users,
     clear_login_cookie,
+    current_user,
+    hash_password,
     login_redirect,
+    make_csrf_token,
     read_session_user,
     require_admin,
     set_login_cookie,
+    verify_csrf,
 )
 from .cleanup import is_demo_id, maybe_cleanup_expired_storage
 from .formatting import (
@@ -48,20 +55,37 @@ from .observability import (
 )
 from .pdf_parser import parse_pdf
 from .settings import (
+    LOGIN_MAX_ATTEMPTS,
+    LOGIN_WINDOW_SECONDS,
+    MAX_ANALYSES_PER_USER,
     MAX_FILES_PER_UPLOAD,
+    MAX_STORAGE_MB_PER_USER,
     MAX_UPLOAD_MB,
+    MIN_PASSWORD_LEN,
+    REGISTER_MAX_ATTEMPTS,
+    REGISTER_WINDOW_SECONDS,
     STATIC_DIR,
     TEMPLATES_DIR,
     UPLOAD_DIR,
     ensure_storage,
 )
-from .storage import delete_record, list_records, load_record, save_record
+from .storage import (
+    can_access,
+    count_owned,
+    delete_record,
+    list_records,
+    load_record,
+    owned_storage_bytes,
+    save_record,
+)
 
 configure_logging()
 log = get_logger()
 log.info("starting", extra={"event": "startup"})
 
 ensure_storage()
+db.init_db()
+bootstrap_users()
 maybe_cleanup_expired_storage(force=True)
 
 app = FastAPI(title="Financial PDF Analyzer", version="0.4.0")
@@ -77,7 +101,7 @@ templates.env.filters["metric"] = fmt_metric
 templates.env.filters["score_label"] = score_label
 
 
-PUBLIC_PATHS = ("/login", "/static", "/favicon.ico", "/healthz", "/metrics", "/demo", "/source-page", "/set-lang")
+PUBLIC_PATHS = ("/login", "/register", "/static", "/favicon.ico", "/healthz", "/metrics", "/demo", "/source-page", "/set-lang")
 ROOT_PUBLIC_PATHS = {"/"}
 
 
@@ -145,10 +169,17 @@ def _template_response_with_i18n(*args, **kwargs):
     if request is not None and isinstance(context, dict):
         context.setdefault("lang", getattr(request.state, "lang", "ja"))
         context.setdefault("t", getattr(request.state, "t", translator("ja")))
+        context.setdefault("csrf_token", make_csrf_token(request))
     return _original_template_response(*args, **kwargs)
 
 
 templates.TemplateResponse = _template_response_with_i18n  # type: ignore[assignment]
+
+
+async def csrf_protect(request: Request, csrf_token: str = Form("")) -> None:
+    """Dependency: reject any POST whose CSRF token doesn't match the session."""
+    if not verify_csrf(request, csrf_token):
+        raise HTTPException(status_code=403, detail="セッションが無効です。ページを再読み込みしてください。")
 
 
 @app.get("/set-lang/{code}")
@@ -227,6 +258,13 @@ async def login_submit(
     password: str = Form(""),
     next: str = Form("/app"),
 ):
+    ip = request.client.host if request.client else "?"
+    if not ratelimit.check_and_record(f"login:{ip}", LOGIN_MAX_ATTEMPTS, LOGIN_WINDOW_SECONDS):
+        return templates.TemplateResponse(
+            request, "login.html",
+            {"next": next, "error": "試行回数が多すぎます。しばらくしてからお試しください。"},
+            status_code=429,
+        )
     user = authenticate(username.strip(), password)
     if not user:
         return templates.TemplateResponse(
@@ -235,9 +273,71 @@ async def login_submit(
             {"next": next, "error": "ユーザー名またはパスワードが正しくありません。"},
             status_code=401,
         )
+    await run_in_threadpool(db.touch_login, user.username)
+    ratelimit.reset(f"login:{ip}")
     target = next if next.startswith("/") and not next.startswith("//") else "/app"
     response = RedirectResponse(url=target, status_code=303)
     set_login_cookie(response, user)
+    return response
+
+
+@app.get("/register")
+async def register_page(request: Request, code: str = Query("")):
+    if read_session_user(request):
+        return RedirectResponse(url="/app", status_code=303)
+    return templates.TemplateResponse(request, "register.html", {"code": code, "error": ""})
+
+
+@app.post("/register")
+async def register_submit(
+    request: Request,
+    code: str = Form(""),
+    username: str = Form(""),
+    password: str = Form(""),
+    confirm: str = Form(""),
+    email: str = Form(""),
+    display_name: str = Form(""),
+):
+    t = getattr(request.state, "t", translator("ja"))
+
+    def fail(msg: str, status: int = 400):
+        return templates.TemplateResponse(
+            request, "register.html",
+            {"code": code, "error": msg, "username": username,
+             "email": email, "display_name": display_name},
+            status_code=status,
+        )
+
+    ip = request.client.host if request.client else "?"
+    if not ratelimit.check_and_record(f"register:{ip}", REGISTER_MAX_ATTEMPTS, REGISTER_WINDOW_SECONDS):
+        return fail(t("ratelimit.too_many", "試行回数が多すぎます。しばらくしてからお試しください。"), 429)
+
+    code_s = code.strip()
+    uname = username.strip()
+    invite = await run_in_threadpool(db.get_invite, code_s)
+    if not invite or not await run_in_threadpool(db.validate_invite, code_s):
+        return fail(t("register.invalid_invite", "招待コードが無効です。"))
+    if not re.fullmatch(r"[A-Za-z0-9_.\-]{3,32}", uname):
+        return fail(t("register.bad_username", "ユーザー名は3〜32文字の半角英数字と _ . - で入力してください。"))
+    if len(password) < MIN_PASSWORD_LEN:
+        return fail(t("register.password_too_short", f"パスワードは{MIN_PASSWORD_LEN}文字以上にしてください。"))
+    if password != confirm:
+        return fail(t("register.password_mismatch", "パスワードが一致しません。"))
+    role = invite["role"] or "user"
+    try:
+        await run_in_threadpool(
+            db.create_user, uname, hash_password(password), role, email.strip(), display_name.strip()
+        )
+    except ValueError:
+        return fail(t("register.generic_fail", "登録できませんでした。入力内容をご確認ください。"))
+    if not await run_in_threadpool(db.consume_invite, code_s):
+        await run_in_threadpool(db.delete_user, uname)  # invite raced out — roll back
+        return fail(t("register.invalid_invite", "招待コードが無効です。"))
+    user = authenticate(uname, password)
+    await run_in_threadpool(db.touch_login, uname)
+    response = RedirectResponse(url="/app", status_code=303)
+    if user:
+        set_login_cookie(response, user)
     return response
 
 
@@ -347,6 +447,26 @@ def reject_demo_mutation(analysis_id: str) -> None:
         raise HTTPException(status_code=403, detail="デモデータは編集できません。")
 
 
+def _ensure_owner_or_admin(record, user) -> None:
+    """404 (not 403, to avoid disclosing existence) unless the user owns it or is admin."""
+    if not (user and (user.is_admin or record.owner == user.username)):
+        raise HTTPException(status_code=404, detail="not found")
+
+
+def _enforce_quota(user, *, new_analysis: bool) -> None:
+    if user.is_admin:
+        return
+    if new_analysis and MAX_ANALYSES_PER_USER and count_owned(user.username) >= MAX_ANALYSES_PER_USER:
+        raise HTTPException(
+            status_code=403,
+            detail=f"分析数の上限（{MAX_ANALYSES_PER_USER}件）に達しました。不要な分析を削除してください。",
+        )
+    if MAX_STORAGE_MB_PER_USER and owned_storage_bytes(user.username) >= MAX_STORAGE_MB_PER_USER * 1024 * 1024:
+        raise HTTPException(
+            status_code=403, detail=f"ストレージ容量の上限（{MAX_STORAGE_MB_PER_USER}MB）に達しました。"
+        )
+
+
 @app.get("/app")
 async def app_index(request: Request):
     # NOTE: the AI provider hook (app/ai_providers.py) is intentionally NOT wired
@@ -356,32 +476,39 @@ async def app_index(request: Request):
         request,
         "index.html",
         {
-            "recent_records": list_records(),
+            "recent_records": list_records(
+                owner=request.state.user.username, is_admin=request.state.user.is_admin
+            ),
             "current_user": request.state.user,
         },
     )
 
 
-@app.post("/upload")
-async def upload_pdfs(files: list[UploadFile] = File(...)):
+@app.post("/upload", dependencies=[Depends(csrf_protect)])
+async def upload_pdfs(request: Request, files: list[UploadFile] = File(...)):
+    user = request.state.user
+    _enforce_quota(user, new_analysis=True)
     analysis_id = datetime.now().strftime("%Y%m%d%H%M%S") + "-" + uuid4().hex[:6]
     documents = await parse_uploaded_pdfs(analysis_id, files)
     record = AnalysisRecord(
         id=analysis_id,
         created_at=datetime.now().strftime("%Y-%m-%d %H:%M"),
         documents=documents,
+        owner=user.username,
     )
     save_record(record)
     return RedirectResponse(url=f"/analysis/{analysis_id}", status_code=303)
 
 
-@app.post("/analysis/{analysis_id}/upload")
-async def append_pdfs(analysis_id: str, files: list[UploadFile] = File(...)):
+@app.post("/analysis/{analysis_id}/upload", dependencies=[Depends(csrf_protect)])
+async def append_pdfs(request: Request, analysis_id: str, files: list[UploadFile] = File(...)):
     reject_demo_mutation(analysis_id)
     try:
         record = load_record(analysis_id)
     except FileNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
+    _ensure_owner_or_admin(record, request.state.user)
+    _enforce_quota(request.state.user, new_analysis=False)
 
     documents = await parse_uploaded_pdfs(analysis_id, files)
     record.documents.extend(documents)
@@ -389,14 +516,14 @@ async def append_pdfs(analysis_id: str, files: list[UploadFile] = File(...)):
     return RedirectResponse(url=f"/analysis/{analysis_id}?added={len(documents)}", status_code=303)
 
 
-@app.post("/analysis/{analysis_id}/reparse")
+@app.post("/analysis/{analysis_id}/reparse", dependencies=[Depends(csrf_protect)])
 async def reparse_documents(request: Request, analysis_id: str):
-    require_admin(request)
     reject_demo_mutation(analysis_id)
     try:
         record = load_record(analysis_id)
     except FileNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
+    _ensure_owner_or_admin(record, request.state.user)
 
     reparsed: list[FinancialDocument] = []
     for old_doc in record.documents:
@@ -434,6 +561,8 @@ def _render_analysis_page(
         record = load_record(analysis_id)
     except FileNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
+    if not can_access(record, current_user):
+        raise HTTPException(status_code=404, detail="not found")
 
     analysis = build_analysis(
         record,
@@ -532,7 +661,7 @@ async def demo_page(
     )
 
 
-@app.post("/analysis/{analysis_id}/documents/delete")
+@app.post("/analysis/{analysis_id}/documents/delete", dependencies=[Depends(csrf_protect)])
 async def delete_documents(
     request: Request,
     analysis_id: str,
@@ -542,12 +671,12 @@ async def delete_documents(
     selected_company: str | None = Form(None),
     chart_type: str | None = Form(None),
 ):
-    require_admin(request)
     reject_demo_mutation(analysis_id)
     try:
         record = load_record(analysis_id)
     except FileNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
+    _ensure_owner_or_admin(record, request.state.user)
 
     delete_ids = {doc_id for doc_id in selected_delete_docs if doc_id}
     deleted_count = 0
@@ -581,14 +710,14 @@ async def delete_documents(
     return RedirectResponse(url=f"/analysis/{analysis_id}?{urlencode(params)}", status_code=303)
 
 
-@app.post("/analysis/{analysis_id}/documents/{doc_id}")
+@app.post("/analysis/{analysis_id}/documents/{doc_id}", dependencies=[Depends(csrf_protect)])
 async def update_document(request: Request, analysis_id: str, doc_id: str):
-    require_admin(request)
     reject_demo_mutation(analysis_id)
     try:
         record = load_record(analysis_id)
     except FileNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
+    _ensure_owner_or_admin(record, request.state.user)
 
     form = await request.form()
     target = next((doc for doc in record.documents if doc.id == doc_id), None)
@@ -608,34 +737,40 @@ async def update_document(request: Request, analysis_id: str, doc_id: str):
     return RedirectResponse(url=f"/analysis/{analysis_id}", status_code=303)
 
 
-@app.post("/analysis/{analysis_id}/rename")
+@app.post("/analysis/{analysis_id}/rename", dependencies=[Depends(csrf_protect)])
 async def rename_analysis(request: Request, analysis_id: str, title: str = Form("")):
-    require_admin(request)
     reject_demo_mutation(analysis_id)
     try:
         record = load_record(analysis_id)
     except FileNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
+    _ensure_owner_or_admin(record, request.state.user)
     record.title = title.strip()[:120]
     save_record(record)
     return RedirectResponse(url="/app", status_code=303)
 
 
-@app.post("/analysis/{analysis_id}/delete")
+@app.post("/analysis/{analysis_id}/delete", dependencies=[Depends(csrf_protect)])
 async def delete_analysis(request: Request, analysis_id: str):
-    require_admin(request)
     reject_demo_mutation(analysis_id)
+    try:
+        record = load_record(analysis_id)
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=404, detail=str(exc)) from exc
+    _ensure_owner_or_admin(record, request.state.user)
     delete_record(analysis_id)
     return RedirectResponse(url="/app", status_code=303)
 
 
 @app.get("/source-page/{analysis_id}/{doc_id}/{page}.png")
-async def source_page_image(analysis_id: str, doc_id: str, page: int):
+async def source_page_image(request: Request, analysis_id: str, doc_id: str, page: int):
     """Render a specific PDF page as a PNG. Used by the C3 source viewer."""
     try:
         record = load_record(analysis_id)
     except FileNotFoundError as exc:
         raise HTTPException(status_code=404, detail=str(exc)) from exc
+    if not can_access(record, request.state.user):
+        raise HTTPException(status_code=404, detail="not found")
 
     doc = next((d for d in record.documents if d.id == doc_id), None)
     if not doc:
@@ -663,3 +798,160 @@ async def source_page_image(analysis_id: str, doc_id: str, page: int):
         media_type="image/png",
         headers={"Cache-Control": "public, max-age=3600"},
     )
+
+
+# ══════════════════════════════════════════════════════════════════════════
+# Account (self-service)
+# ══════════════════════════════════════════════════════════════════════════
+@app.get("/account")
+async def account_page(request: Request):
+    user = request.state.user
+    return templates.TemplateResponse(
+        request, "account.html",
+        {"current_user": user, "account": db.get_user_by_name(user.username), "error": "", "ok": ""},
+    )
+
+
+@app.post("/account/profile", dependencies=[Depends(csrf_protect)])
+async def account_profile(request: Request, email: str = Form(""), display_name: str = Form("")):
+    user = request.state.user
+    await run_in_threadpool(db.set_profile, user.username, email.strip()[:200], display_name.strip()[:80])
+    return RedirectResponse(url="/account", status_code=303)
+
+
+@app.post("/account/password", dependencies=[Depends(csrf_protect)])
+async def account_password(
+    request: Request,
+    current_password: str = Form(""),
+    new_password: str = Form(""),
+    confirm: str = Form(""),
+):
+    user = request.state.user
+    t = getattr(request.state, "t", translator("ja"))
+
+    def render(error: str):
+        return templates.TemplateResponse(
+            request, "account.html",
+            {"current_user": user, "account": db.get_user_by_name(user.username), "error": error, "ok": ""},
+            status_code=400,
+        )
+
+    if not authenticate(user.username, current_password):
+        return render(t("account.wrong_current_password", "現在のパスワードが正しくありません。"))
+    if len(new_password) < MIN_PASSWORD_LEN:
+        return render(t("register.password_too_short", f"パスワードは{MIN_PASSWORD_LEN}文字以上にしてください。"))
+    if new_password != confirm:
+        return render(t("register.password_mismatch", "パスワードが一致しません。"))
+    await run_in_threadpool(db.set_password, user.username, hash_password(new_password))
+    return RedirectResponse(url="/account?ok=1", status_code=303)
+
+
+@app.post("/account/delete", dependencies=[Depends(csrf_protect)])
+async def account_delete(request: Request, confirm_username: str = Form("")):
+    user = request.state.user
+    t = getattr(request.state, "t", translator("ja"))
+
+    def render(error: str):
+        return templates.TemplateResponse(
+            request, "account.html",
+            {"current_user": user, "account": db.get_user_by_name(user.username), "error": error, "ok": ""},
+            status_code=400,
+        )
+
+    if confirm_username.strip() != user.username:
+        return render(t("account.delete_confirm_hint", "確認のため、ご自身のユーザー名を正確に入力してください。"))
+    if user.is_admin and db.count_admins() <= 1:
+        return render(t("admin.last_admin", "最後の管理者アカウントは削除できません。"))
+    for rec in list_records(limit=1000000, owner=user.username, is_admin=False):
+        await run_in_threadpool(delete_record, rec["id"])
+    await run_in_threadpool(db.delete_user, user.username)
+    response = RedirectResponse(url="/", status_code=303)
+    clear_login_cookie(response)
+    return response
+
+
+# ══════════════════════════════════════════════════════════════════════════
+# Admin · user & invite management
+# ══════════════════════════════════════════════════════════════════════════
+def _render_admin(request: Request, new_invite: str = "", new_password: str = ""):
+    return templates.TemplateResponse(
+        request, "admin_users.html",
+        {
+            "current_user": request.state.user,
+            "users": db.list_users(),
+            "invites": db.list_invites(),
+            "new_invite": new_invite,
+            "new_password": new_password,
+        },
+    )
+
+
+@app.get("/admin/users")
+async def admin_users_page(request: Request):
+    require_admin(request)
+    return _render_admin(request)
+
+
+def _admin_target(username: str):
+    target = db.get_user_by_name(username)
+    if not target:
+        raise HTTPException(status_code=404, detail="user not found")
+    return target
+
+
+@app.post("/admin/users/{username}/status", dependencies=[Depends(csrf_protect)])
+async def admin_set_status(request: Request, username: str, status: str = Form("active")):
+    require_admin(request)
+    target = _admin_target(username)
+    new_status = "disabled" if status == "disabled" else "active"
+    if new_status == "disabled" and target["role"] == "admin" and db.count_admins() <= 1:
+        raise HTTPException(status_code=400, detail="最後の管理者を無効化できません。")
+    await run_in_threadpool(db.set_status, username, new_status)
+    return RedirectResponse(url="/admin/users", status_code=303)
+
+
+@app.post("/admin/users/{username}/role", dependencies=[Depends(csrf_protect)])
+async def admin_set_role(request: Request, username: str, role: str = Form("user")):
+    require_admin(request)
+    target = _admin_target(username)
+    new_role = "admin" if role == "admin" else "user"
+    if target["role"] == "admin" and new_role != "admin" and db.count_admins() <= 1:
+        raise HTTPException(status_code=400, detail="最後の管理者を降格できません。")
+    await run_in_threadpool(db.set_role, username, new_role)
+    return RedirectResponse(url="/admin/users", status_code=303)
+
+
+@app.post("/admin/users/{username}/reset-password", dependencies=[Depends(csrf_protect)])
+async def admin_reset_password(request: Request, username: str):
+    require_admin(request)
+    _admin_target(username)
+    new_pw = secrets.token_urlsafe(9)
+    await run_in_threadpool(db.set_password, username, hash_password(new_pw))
+    return _render_admin(request, new_password=f"{username} / {new_pw}")
+
+
+@app.post("/admin/users/{username}/delete", dependencies=[Depends(csrf_protect)])
+async def admin_delete_user(request: Request, username: str):
+    require_admin(request)
+    target = _admin_target(username)
+    if target["role"] == "admin" and db.count_admins() <= 1:
+        raise HTTPException(status_code=400, detail="最後の管理者は削除できません。")
+    for rec in list_records(limit=1000000, owner=target["username"], is_admin=False):
+        await run_in_threadpool(delete_record, rec["id"])
+    await run_in_threadpool(db.delete_user, username)
+    return RedirectResponse(url="/admin/users", status_code=303)
+
+
+@app.post("/admin/invites", dependencies=[Depends(csrf_protect)])
+async def admin_create_invite(request: Request, role: str = Form("user"), max_uses: int = Form(1)):
+    admin = require_admin(request)
+    new_role = "admin" if role == "admin" else "user"
+    code = await run_in_threadpool(db.create_invite, new_role, admin.username, max(1, int(max_uses)))
+    return _render_admin(request, new_invite=code)
+
+
+@app.post("/admin/invites/{code}/revoke", dependencies=[Depends(csrf_protect)])
+async def admin_revoke_invite(request: Request, code: str):
+    require_admin(request)
+    await run_in_threadpool(db.revoke_invite, code)
+    return RedirectResponse(url="/admin/users", status_code=303)

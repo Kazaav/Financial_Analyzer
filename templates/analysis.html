@@ -19,7 +19,7 @@
     });
   })();
   </script>
-  <link rel="stylesheet" href="/static/styles.css?v=20260613b">
+  <link rel="stylesheet" href="/static/styles.css?v=20260614a">
 </head>
 <body>
 {% macro info(key) -%}
@@ -190,8 +190,9 @@
     <!-- Footer actions -->
     <div class="sidebar-foot">
 
-      {% if current_user and current_user.is_admin and not is_demo %}
+      {% if current_user and (current_user.is_admin or analysis.record.owner == current_user.username) and not is_demo %}
       <form action="/analysis/{{ analysis.record.id }}/reparse" method="post">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
         <button class="button" type="submit" style="width:100%">全PDF再解析</button>
       </form>
       {% endif %}
@@ -627,6 +628,7 @@
           <div class="manage-card-body">
             <form class="upload-workbench" action="/analysis/{{ analysis.record.id }}/upload"
                   method="post" enctype="multipart/form-data" data-upload-queue>
+              <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
               <input class="file-input-native" type="file" name="files" accept="application/pdf,.pdf" multiple data-file-input>
               <div class="upload-zone" data-drop-zone style="border:1px dashed var(--bd);border-radius:var(--r-sm);background:var(--bg2);padding:12px">
                 <div class="upload-trigger-row">
@@ -649,11 +651,12 @@
           </div>
         </div>
 
-        {% if current_user.is_admin %}
+        {% if current_user and (current_user.is_admin or analysis.record.owner == current_user.username) %}
 
         <!-- Delete PDFs -->
         <div class="manage-card">
           <form action="/analysis/{{ analysis.record.id }}/documents/delete" method="post" data-delete-form>
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
             <input type="hidden" name="mode" value="{{ analysis.mode }}">
             <input type="hidden" name="selected_year" value="{{ analysis.selected_year or '' }}">
             <input type="hidden" name="selected_company" value="{{ analysis.selected_company or '' }}">
@@ -699,6 +702,7 @@
               </summary>
               <div class="doc-review-body">
                 <form action="/analysis/{{ analysis.record.id }}/documents/{{ doc.id }}" method="post">
+                  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
                   <div class="edit-grid">
                     <div class="field">
                       <label>証券コード</label>
@@ -784,7 +788,7 @@
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/echarts@5.5.0/dist/echarts.min.js"></script>
-<script src="/static/chart.js?v=20260613b"></script>
-<script src="/static/uploader.js?v=20260613b"></script>
+<script src="/static/chart.js?v=20260614a"></script>
+<script src="/static/uploader.js?v=20260614a"></script>
 </body>
 </html>

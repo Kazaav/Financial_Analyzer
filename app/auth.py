@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import base64
 import hashlib
 import hmac
 import logging
@@ -13,13 +12,13 @@ from urllib.parse import quote
 from fastapi import HTTPException, Request
 from fastapi.responses import RedirectResponse, Response
 
+from . import db
+from .passwords import hash_password, verify_password  # noqa: F401 (re-exported)
 from .settings import COOKIE_SECURE, SESSION_MAX_AGE_SECONDS
 
 SESSION_COOKIE = "financial_analyzer_session"
-# No credentials are baked into the source. Provide users via the
-# FINANCIAL_ANALYZER_USERS env var, formatted as:
-#   "username:role:pbkdf2_sha256$<iter>$<salt>$<b64hash>;user2:role2:..."
-# With this unset, nobody can log in (fail closed).
+# Users now live in SQLite (app.db). FINANCIAL_ANALYZER_USERS is only read once,
+# at first run, to seed the admin into an empty DB (see bootstrap_users).
 DEFAULT_USERS = ""
 SESSION_SECRET = os.getenv("FINANCIAL_ANALYZER_SESSION_SECRET")
 if not SESSION_SECRET:
@@ -41,11 +40,12 @@ class User:
         return self.role == "admin"
 
 
-def _b64(data: bytes) -> str:
-    return base64.urlsafe_b64encode(data).decode().rstrip("=")
+def _row_to_user(row) -> User:
+    return User(username=row["username"], role=row["role"], password_hash=row["password_hash"])
 
 
 def parse_users() -> dict[str, User]:
+    """Parse the legacy FINANCIAL_ANALYZER_USERS env var (used only by bootstrap)."""
     raw = os.getenv("FINANCIAL_ANALYZER_USERS", DEFAULT_USERS)
     users: dict[str, User] = {}
     for item in raw.split(";"):
@@ -56,26 +56,28 @@ def parse_users() -> dict[str, User]:
         if len(parts) != 3:
             continue
         username, role, password_hash = parts
-        users[username] = User(username=username, role=role or "guest", password_hash=password_hash)
+        users[username] = User(username=username, role=role or "user", password_hash=password_hash)
     return users
 
 
-def verify_password(password: str, password_hash: str) -> bool:
-    if not password_hash.startswith("pbkdf2_sha256$"):
-        return False
+def bootstrap_users() -> None:
+    """First-run seed: if the users table is empty, import the env-defined users
+    so the existing admin keeps working. Idempotent — only acts on an empty table."""
     try:
-        _, iterations, salt, expected = password_hash.split("$", 3)
-        digest = hashlib.pbkdf2_hmac("sha256", password.encode(), salt.encode(), int(iterations))
-    except (ValueError, TypeError):
-        return False
-    return hmac.compare_digest(_b64(digest), expected)
+        if db.count_users() > 0:
+            return
+        for u in parse_users().values():
+            try:
+                db.create_user(u.username, u.password_hash, role=u.role)
+            except ValueError:
+                pass
+    except Exception:  # pragma: no cover - never block startup on bootstrap
+        logging.getLogger("financial_analyzer").exception("bootstrap_users failed")
 
 
 def authenticate(username: str, password: str) -> User | None:
-    user = parse_users().get(username)
-    if not user or not verify_password(password, user.password_hash):
-        return None
-    return user
+    row = db.authenticate(username, password)
+    return _row_to_user(row) if row else None
 
 
 def _sign(payload: str) -> str:
@@ -102,10 +104,12 @@ def read_session_user(request: Request) -> User | None:
             return None
     except ValueError:
         return None
-    user = parse_users().get(username)
-    if not user or user.role != role:
+    # Re-load from the DB every request: the cookie's role is NOT trusted, and a
+    # disabled/deleted account loses access immediately.
+    row = db.get_user_by_name(username)
+    if not row or row["status"] != "active":
         return None
-    return user
+    return _row_to_user(row)
 
 
 def set_login_cookie(response: Response, user: User) -> None:
@@ -128,8 +132,27 @@ def login_redirect(request: Request) -> RedirectResponse:
     return RedirectResponse(url=f"/login?next={target}", status_code=303)
 
 
+def current_user(request: Request) -> User:
+    user = getattr(request.state, "user", None)
+    if not user:
+        raise HTTPException(status_code=401, detail="ログインが必要です。")
+    return user
+
+
 def require_admin(request: Request) -> User:
     user = getattr(request.state, "user", None)
     if not user or not user.is_admin:
         raise HTTPException(status_code=403, detail="管理者権限が必要です。")
     return user
+
+
+# ── CSRF ─────────────────────────────────────────────────────────────────
+# Stateless token bound to the (httponly, signed) session cookie. A cross-site
+# attacker cannot read the cookie, so cannot forge a matching token.
+def make_csrf_token(request: Request) -> str:
+    sess = request.cookies.get(SESSION_COOKIE, "")
+    return hmac.new(SESSION_SECRET.encode(), ("csrf:" + sess).encode(), hashlib.sha256).hexdigest()
+
+
+def verify_csrf(request: Request, token: str) -> bool:
+    return bool(token) and hmac.compare_digest(make_csrf_token(request), token)

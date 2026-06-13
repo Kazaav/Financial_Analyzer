@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="{{ lang or 'ja' }}">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{{ t('account.title', 'アカウント') }} · Financial Analyzer</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&family=Noto+Sans+JP:wght@400;500;600&display=swap" rel="stylesheet">
+  <script>
+  (function(){
+    try{ if(localStorage.getItem('fa-theme')==='light') document.documentElement.setAttribute('data-theme','light'); }catch(e){}
+    document.addEventListener('click',function(e){
+      var b=e.target.closest&&e.target.closest('[data-theme-toggle]'); if(!b)return;
+      var d=document.documentElement, light=d.getAttribute('data-theme')==='light';
+      if(light){d.removeAttribute('data-theme');} else {d.setAttribute('data-theme','light');}
+      try{ localStorage.setItem('fa-theme', light?'dark':'light'); }catch(e){}
+      document.dispatchEvent(new CustomEvent('fa-themechange'));
+    });
+  })();
+  </script>
+  <link rel="stylesheet" href="/static/styles.css?v=20260614a">
+</head>
+<body>
+<div class="home-wrap">
+
+  <header class="top-nav">
+    <div class="top-nav-brand">
+      <h1>{{ t('account.title', 'アカウント') }}</h1>
+      <p>{{ current_user.username }} / {{ current_user.role }}</p>
+    </div>
+    <div class="top-nav-actions">
+      <a class="button ghost" href="/app">← {{ t('nav.app', 'アプリ') }}</a>
+      {% if current_user.is_admin %}<a class="button ghost" href="/admin/users">{{ t('nav.admin', 'ユーザー管理') }}</a>{% endif %}
+      <a class="button ghost" href="/logout">{{ t('nav.logout', 'ログアウト') }}</a>
+      <button class="theme-toggle" type="button" data-theme-toggle aria-label="テーマ切替" title="ライト / ダーク切替">
+        <svg class="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>
+        <svg class="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v1.5M12 20.5V22M3.5 12H2M22 12h-1.5M5.6 5.6 4.5 4.5M19.5 19.5l-1.1-1.1M18.4 5.6l1.1-1.1M4.5 19.5l1.1-1.1"/></svg>
+      </button>
+    </div>
+  </header>
+
+  {% if request.query_params.get('ok') %}<div class="notice">{{ t('account.saved', '変更を保存しました。') }}</div>{% endif %}
+  {% if error %}<div class="notice warn">{{ error }}</div>{% endif %}
+
+  <div class="panel pad" style="margin-bottom:16px">
+    <h2 style="font-size:15px;font-weight:600;margin-bottom:14px">{{ t('account.profile', 'プロフィール') }}</h2>
+    <form action="/account/profile" method="post" style="display:grid;gap:12px;max-width:440px">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <div class="field">
+        <label>{{ t('account.display_name', '表示名') }}</label>
+        <input name="display_name" value="{{ account['display_name'] if account else '' }}">
+      </div>
+      <div class="field">
+        <label>{{ t('account.email', 'メール') }}</label>
+        <input type="email" name="email" value="{{ account['email'] if account else '' }}">
+      </div>
+      <button class="button primary" type="submit">{{ t('account.save', '保存') }}</button>
+    </form>
+  </div>
+
+  <div class="panel pad" style="margin-bottom:16px">
+    <h2 style="font-size:15px;font-weight:600;margin-bottom:14px">{{ t('account.change_password', 'パスワード変更') }}</h2>
+    <form action="/account/password" method="post" style="display:grid;gap:12px;max-width:440px">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <div class="field">
+        <label>{{ t('account.current_password', '現在のパスワード') }}</label>
+        <input type="password" name="current_password" autocomplete="current-password" required>
+      </div>
+      <div class="field">
+        <label>{{ t('account.new_password', '新しいパスワード') }}</label>
+        <input type="password" name="new_password" autocomplete="new-password" required>
+      </div>
+      <div class="field">
+        <label>{{ t('register.confirm', 'パスワード（確認）') }}</label>
+        <input type="password" name="confirm" autocomplete="new-password" required>
+      </div>
+      <button class="button primary" type="submit">{{ t('account.change_password', 'パスワード変更') }}</button>
+    </form>
+  </div>
+
+  <div class="panel pad">
+    <h2 style="font-size:15px;font-weight:600;margin-bottom:8px;color:var(--minus)">{{ t('account.delete_account', 'アカウント削除') }}</h2>
+    <p class="muted" style="margin-bottom:14px">{{ t('account.delete_hint', 'アカウントと、あなたが作成したすべての分析が完全に削除されます。元に戻せません。') }}</p>
+    <form action="/account/delete" method="post" style="display:grid;gap:12px;max-width:440px"
+          onsubmit="return confirm('{{ t('account.delete_confirm_js', '本当にアカウントを削除しますか？') }}')">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <div class="field">
+        <label>{{ t('account.delete_confirm_label', '確認のためユーザー名を入力') }}（{{ current_user.username }}）</label>
+        <input name="confirm_username" autocomplete="off">
+      </div>
+      <button class="button danger" type="submit">{{ t('account.delete_account', 'アカウント削除') }}</button>
+    </form>
+  </div>
+
+</div>
+</body>
+</html>

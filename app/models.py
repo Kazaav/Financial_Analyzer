@@ -57,12 +57,14 @@ class AnalysisRecord:
     created_at: str
     documents: list[FinancialDocument]
     title: str = ""
+    owner: str = ""  # username of the creator; "" = legacy (admin-only)
 
     def to_dict(self) -> dict[str, Any]:
         return {
             "id": self.id,
             "created_at": self.created_at,
             "title": self.title,
+            "owner": self.owner,
             "documents": [doc.to_dict() for doc in self.documents],
         }
 
@@ -72,6 +74,7 @@ class AnalysisRecord:
             id=data["id"],
             created_at=data["created_at"],
             title=str(data.get("title", "") or ""),
+            owner=str(data.get("owner", "") or ""),
             documents=[FinancialDocument.from_dict(item) for item in data.get("documents", [])],
         )
 

@@ -1104,20 +1104,68 @@ input[type="radio"]{accent-color:var(--accent)}
 .demo-banner-link{font-size:11px;color:var(--accent);margin-left:auto;flex-shrink:0}
 
 /* ══════════════════════════════════════════════════════════════════
-   18. LOGIN PAGE
+   18. AUTH PAGES (login / register) — full-bleed hero
    ══════════════════════════════════════════════════════════════════ */
-.login-shell{
-  min-height:100vh;display:flex;align-items:center;justify-content:center;
-  background:radial-gradient(ellipse 60% 40% at 50% 0%, rgba(124,157,255,.08), transparent), var(--bg-base);
-  padding:32px 16px;
+.auth-hero{
+  min-height:100vh;display:flex;flex-direction:column;position:relative;
+  background:
+    radial-gradient(ellipse 80% 50% at 50% -10%, rgba(124,157,255,.10), transparent 60%),
+    linear-gradient(180deg, rgba(124,157,255,.02), transparent 30%),
+    var(--bg-base);
 }
-.login-panel{width:min(400px,100%);padding:40px 36px;background:var(--bg-elev-1);border:1px solid var(--bd-soft);border-radius:var(--r-lg);box-shadow:var(--sh-lg)}
-.login-brand-block{display:flex;align-items:center;gap:14px;margin-bottom:24px}
-.login-logo-svg{flex-shrink:0;border-radius:9px}
-.brand{font-size:18px;font-weight:600;line-height:1.2;color:var(--t1);letter-spacing:-.01em}
-.login-form{display:grid;gap:14px}
-.login-button{width:100%;min-height:38px;margin-top:4px}
-.login-error{margin:0 0 4px}
+.auth-hero::before{
+  content:"";position:fixed;inset:0;pointer-events:none;z-index:0;
+  background-image:
+    linear-gradient(rgba(124,157,255,.025) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(124,157,255,.025) 1px, transparent 1px);
+  background-size:48px 48px;
+  mask-image:radial-gradient(ellipse 60% 50% at 50% 38%, black, transparent 80%);
+  -webkit-mask-image:radial-gradient(ellipse 60% 50% at 50% 38%, black, transparent 80%);
+}
+.auth-topbar{
+  display:flex;align-items:center;justify-content:space-between;gap:12px;
+  padding:18px 24px;position:relative;z-index:1;
+}
+.auth-brand{
+  display:inline-flex;align-items:center;gap:10px;text-decoration:none;
+  font-size:14px;font-weight:600;color:var(--t1);letter-spacing:-.01em;
+}
+.auth-brand:hover{text-decoration:none;color:var(--t1)}
+.auth-topbar-right{display:flex;align-items:center;gap:8px}
+.auth-main{
+  flex:1;display:flex;align-items:center;justify-content:center;
+  padding:24px 24px 56px;position:relative;z-index:1;
+}
+.auth-center{width:min(440px,100%);text-align:center}
+.auth-eyebrow{
+  display:inline-flex;align-items:center;gap:10px;
+  padding:6px 14px;border:1px solid var(--bd-strong);border-radius:var(--r-pill);
+  background:var(--bg-elev-1);color:var(--t2);
+  font-family:var(--font-mono);font-size:11px;font-weight:500;letter-spacing:.02em;
+  margin-bottom:20px;
+}
+.auth-eyebrow::before{content:"";width:6px;height:6px;border-radius:50%;background:var(--accent)}
+.auth-headline{
+  font-size:clamp(26px,4vw,38px);font-weight:700;letter-spacing:-.03em;line-height:1.1;
+  color:var(--t1);
+}
+.auth-sub{color:var(--t2);font-size:14px;line-height:1.55;margin:10px 0 26px}
+.auth-card{
+  background:var(--bg-elev-1);border:1px solid var(--bd-soft);
+  border-radius:var(--r-lg);box-shadow:var(--sh-lg);
+  padding:28px;text-align:left;
+}
+.auth-form{display:grid;gap:14px}
+.auth-form .button{width:100%;min-height:40px;margin-top:4px}
+.auth-foot{display:grid;gap:8px;margin-top:18px;text-align:center}
+.auth-foot a{font-size:13px;color:var(--accent)}
+.auth-foot a.muted-link{font-size:12px;color:var(--t3)}
+@media(max-width:560px){
+  .auth-topbar{padding:14px 16px}
+  .auth-brand span:last-child{display:none}
+  .auth-main{padding:16px 16px 40px}
+  .auth-card{padding:22px}
+}
 
 /* ══════════════════════════════════════════════════════════════════
    19. REPORT PAGE

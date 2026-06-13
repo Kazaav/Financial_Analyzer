@@ -1,68 +1,75 @@
 <!DOCTYPE html>
-<html lang="ja">
+<html lang="{{ lang or 'ja' }}">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>ログイン · Financial Analyzer</title>
+  <title>{{ t('login.title', 'ログイン') }} · Financial Analyzer</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&family=Noto+Sans+JP:wght@400;500;600&display=swap" rel="stylesheet">
   <script>
-  (function(){ try{ if(localStorage.getItem('fa-theme')==='light') document.documentElement.setAttribute('data-theme','light'); }catch(e){} })();
+  (function(){
+    try{ if(localStorage.getItem('fa-theme')==='light') document.documentElement.setAttribute('data-theme','light'); }catch(e){}
+    document.addEventListener('click',function(e){
+      var b=e.target.closest&&e.target.closest('[data-theme-toggle]'); if(!b)return;
+      var d=document.documentElement, light=d.getAttribute('data-theme')==='light';
+      if(light){d.removeAttribute('data-theme');} else {d.setAttribute('data-theme','light');}
+      try{ localStorage.setItem('fa-theme', light?'dark':'light'); }catch(e){}
+      document.dispatchEvent(new CustomEvent('fa-themechange'));
+    });
+  })();
   </script>
-  <link rel="stylesheet" href="/static/styles.css?v=20260614a">
+  <link rel="stylesheet" href="/static/styles.css?v=20260614b">
 </head>
 <body>
+<div class="auth-hero">
 
-<div class="login-shell">
-  <div class="login-panel">
+  <header class="auth-topbar">
+    <a class="auth-brand" href="/"><span class="landing-brand-dot"></span><span>Financial Analyzer</span></a>
+    <div class="auth-topbar-right">
+      <div class="lang-switch" role="group" aria-label="Language">
+        <a class="lang-opt {% if lang == 'ja' %}is-active{% endif %}" href="/set-lang/ja?next=/login">JA</a>
+        <a class="lang-opt {% if lang == 'en' %}is-active{% endif %}" href="/set-lang/en?next=/login">EN</a>
+        <a class="lang-opt {% if lang == 'zh' %}is-active{% endif %}" href="/set-lang/zh?next=/login">中</a>
+      </div>
+      <button class="theme-toggle" type="button" data-theme-toggle aria-label="テーマ切替" title="ライト / ダーク切替">
+        <svg class="icon-moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.8A9 9 0 1 1 11.2 3a7 7 0 0 0 9.8 9.8z"/></svg>
+        <svg class="icon-sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="4"/><path d="M12 2v1.5M12 20.5V22M3.5 12H2M22 12h-1.5M5.6 5.6 4.5 4.5M19.5 19.5l-1.1-1.1M18.4 5.6l1.1-1.1M4.5 19.5l1.1-1.1"/></svg>
+      </button>
+    </div>
+  </header>
 
-    <div class="login-brand-block">
-      <svg class="login-logo-svg" viewBox="0 0 36 36" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" width="36" height="36">
-        <defs>
-          <linearGradient id="logoG" x1="0" y1="0" x2="1" y2="1">
-            <stop offset="0%" stop-color="var(--accent)"/>
-            <stop offset="100%" stop-color="var(--accent-strong)"/>
-          </linearGradient>
-        </defs>
-        <rect width="36" height="36" rx="9" fill="url(#logoG)"/>
-        <rect x="8" y="11" width="12" height="2" rx="1" fill="white"/>
-        <rect x="8" y="16" width="20" height="2" rx="1" fill="white"/>
-        <rect x="8" y="21" width="16" height="2" rx="1" fill="white"/>
-      </svg>
-      <div>
-        <p class="eyebrow">Financial Analyzer</p>
-        <h1 class="brand">ログイン</h1>
+  <main class="auth-main">
+    <div class="auth-center">
+      <div class="auth-eyebrow">{{ t('landing.eyebrow') }}</div>
+      <h1 class="auth-headline">{{ t('login.title', 'ログイン') }}</h1>
+      <p class="auth-sub">{{ t('auth.tagline', '有価証券報告書を読み解く分析プラットフォーム') }}</p>
+
+      <div class="auth-card">
+        {% if error %}
+        <div class="notice warn" role="alert" style="margin-bottom:14px">{{ error }}</div>
+        {% endif %}
+        <form class="auth-form" action="/login" method="post">
+          <input type="hidden" name="next" value="{{ next }}">
+          <div class="field">
+            <label for="username">{{ t('login.username', 'ユーザー名') }}</label>
+            <input type="text" id="username" name="username"
+                   autocomplete="username" autocapitalize="off" spellcheck="false" required autofocus>
+          </div>
+          <div class="field">
+            <label for="password">{{ t('login.password', 'パスワード') }}</label>
+            <input type="password" id="password" name="password" autocomplete="current-password" required>
+          </div>
+          <button class="button primary" type="submit">{{ t('login.submit', 'ログイン') }}</button>
+        </form>
+        <div class="auth-foot">
+          <a href="/register">{{ t('register.title', '新規登録') }}</a>
+          <a class="muted-link" href="/">{{ t('login.back', '← トップに戻る') }}</a>
+        </div>
       </div>
     </div>
+  </main>
 
-    {% if error %}
-    <div class="notice warn login-error" role="alert">{{ error }}</div>
-    {% endif %}
-
-    <form class="login-form" action="/login" method="post">
-      <input type="hidden" name="next" value="{{ next }}">
-      <div class="field">
-        <label for="username">ユーザー名</label>
-        <input type="text" id="username" name="username"
-               autocomplete="username" autocapitalize="off" spellcheck="false"
-               required autofocus>
-      </div>
-      <div class="field">
-        <label for="password">パスワード</label>
-        <input type="password" id="password" name="password"
-               autocomplete="current-password" required>
-      </div>
-      <button class="button primary login-button" type="submit">ログイン</button>
-    </form>
-
-    <div style="margin-top:20px;text-align:center;display:grid;gap:8px">
-      <a href="/register" style="font-size:13px;color:var(--accent)">{{ t('register.title', '新規登録') }}</a>
-      <a href="/" style="font-size:12px;color:var(--t3)">← トップに戻る</a>
-    </div>
-
-  </div>
 </div>
-
 </body>
 </html>

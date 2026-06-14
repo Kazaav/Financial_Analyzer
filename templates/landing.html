@@ -20,7 +20,7 @@
     });
   })();
   </script>
-  <link rel="stylesheet" href="/static/styles.css?v=20260614b">
+  <link rel="stylesheet" href="/static/styles.css?v=20260614c">
 </head>
 <body>
 <div class="landing">
@@ -49,12 +49,44 @@
   </nav>
 
   <section class="landing-hero">
-    <div class="landing-eyebrow">{{ t('landing.eyebrow') }}</div>
-    <h1 class="landing-headline">{{ t('landing.headline.line1') }}<br>{{ t('landing.headline.line2') }}</h1>
-    <p class="landing-sub">{{ t('landing.sub') }}</p>
-    <div class="landing-cta-row">
-      <a class="button primary" href="#demos">{{ t('landing.cta.samples') }} →</a>
-      <a class="button ghost" href="/login">{{ t('landing.cta.login') }}</a>
+    <div class="landing-hero-text">
+      <div class="landing-eyebrow">{{ t('landing.eyebrow') }}</div>
+      <h1 class="landing-headline">{{ t('landing.headline') }}</h1>
+      <p class="landing-sub">{{ t('landing.sub') }}</p>
+      <div class="landing-cta-row">
+        <a class="button primary" href="#demos">{{ t('landing.cta.samples') }} →</a>
+        <a class="button ghost" href="/login">{{ t('landing.cta.login') }}</a>
+      </div>
+    </div>
+    <div class="landing-hero-visual">
+      <div class="hero-preview" role="img" aria-label="{{ t('landing.eyebrow') }}">
+        <div class="hp-chrome">
+          <span class="hp-tab is-active">時系列</span>
+          <span class="hp-tab">横断</span>
+          <span class="hp-tab">カスタム</span>
+          <span class="hp-sel" style="margin-left:auto">4307 ▾</span>
+          <span class="hp-sel">2019–2024 ▾</span>
+        </div>
+        <div class="hp-body">
+          <svg class="hp-chart" viewBox="0 0 560 220" preserveAspectRatio="xMidYMid meet" aria-hidden="true">
+            <line class="hp-grid" x1="20" y1="40" x2="540" y2="40"/>
+            <line class="hp-grid" x1="20" y1="80" x2="540" y2="80"/>
+            <line class="hp-grid" x1="20" y1="120" x2="540" y2="120"/>
+            <line class="hp-grid" x1="20" y1="160" x2="540" y2="160"/>
+            <line class="hp-axis" x1="20" y1="188" x2="540" y2="188"/>
+            <path class="hp-area" d="M20,150 L124,140 L228,120 L332,128 L436,96 L540,72 L540,188 L20,188 Z"/>
+            <polyline class="hp-series hp-c" points="20,176 124,178 228,170 332,172 436,166 540,158"/>
+            <polyline class="hp-series hp-b" points="20,168 124,160 228,150 332,138 436,132 540,118"/>
+            <polyline class="hp-series hp-a" points="20,150 124,140 228,120 332,128 436,96 540,72"/>
+            <circle class="hp-dot" cx="540" cy="72" r="3.5"/>
+          </svg>
+          <div class="hp-chips">
+            <div class="hp-chip"><div class="hp-chip-l">売上高</div><div class="hp-chip-v">6,830 <span class="up">▲</span></div></div>
+            <div class="hp-chip"><div class="hp-chip-l">営業利益</div><div class="hp-chip-v">1,024 <span class="up">▲</span></div></div>
+            <div class="hp-chip"><div class="hp-chip-l">ROE</div><div class="hp-chip-v">14.2% <span class="up">▲</span></div></div>
+          </div>
+        </div>
+      </div>
     </div>
   </section>
 
@@ -74,27 +106,11 @@
 
   <section class="landing-section">
     <div class="landing-section-label">{{ t('landing.section.capabilities') }}</div>
-    <div class="capability-grid">
-      <div class="capability">
-        <div class="capability-num">01</div>
-        <div class="capability-title">{{ t('landing.cap1.title') }}</div>
-        <div class="capability-desc">{{ t('landing.cap1.desc') }}</div>
-      </div>
-      <div class="capability">
-        <div class="capability-num">02</div>
-        <div class="capability-title">{{ t('landing.cap2.title') }}</div>
-        <div class="capability-desc">{{ t('landing.cap2.desc') }}</div>
-      </div>
-      <div class="capability">
-        <div class="capability-num">03</div>
-        <div class="capability-title">{{ t('landing.cap3.title') }}</div>
-        <div class="capability-desc">{{ t('landing.cap3.desc') }}</div>
-      </div>
-      <div class="capability">
-        <div class="capability-num">04</div>
-        <div class="capability-title">{{ t('landing.cap4.title') }}</div>
-        <div class="capability-desc">{{ t('landing.cap4.desc') }}</div>
-      </div>
+    <div class="landing-spec">
+      <span class="landing-spec-item">{{ t('landing.cap1.title') }}</span>
+      <span class="landing-spec-item">{{ t('landing.cap2.title') }}</span>
+      <span class="landing-spec-item">{{ t('landing.cap3.title') }}</span>
+      <span class="landing-spec-item">{{ t('landing.cap4.title') }}</span>
     </div>
   </section>
 

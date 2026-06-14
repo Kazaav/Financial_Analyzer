@@ -20,7 +20,7 @@
     });
   })();
   </script>
-  <link rel="stylesheet" href="/static/styles.css?v=20260614c">
+  <link rel="stylesheet" href="/static/styles.css?v=20260614d">
 </head>
 <body>
 <div class="landing">
@@ -50,7 +50,6 @@
 
   <section class="landing-hero">
     <div class="landing-hero-text">
-      <div class="landing-eyebrow">{{ t('landing.eyebrow') }}</div>
       <h1 class="landing-headline">{{ t('landing.headline') }}</h1>
       <p class="landing-sub">{{ t('landing.sub') }}</p>
       <div class="landing-cta-row">
@@ -59,13 +58,14 @@
       </div>
     </div>
     <div class="landing-hero-visual">
-      <div class="hero-preview" role="img" aria-label="{{ t('landing.eyebrow') }}">
+      <div class="hero-preview">
         <div class="hp-chrome">
-          <span class="hp-tab is-active">時系列</span>
-          <span class="hp-tab">横断</span>
-          <span class="hp-tab">カスタム</span>
-          <span class="hp-sel" style="margin-left:auto">4307 ▾</span>
-          <span class="hp-sel">2019–2024 ▾</span>
+          <div class="hp-seg" id="hpSeg" role="group" aria-label="会社を選択">
+            <button type="button" class="is-active" data-co="0">野村総研</button>
+            <button type="button" data-co="1">TIS</button>
+            <button type="button" data-co="2">アバント</button>
+          </div>
+          <span class="hp-cap" id="hpCap">4307 · 2020–2025</span>
         </div>
         <div class="hp-body">
           <svg class="hp-chart" viewBox="0 0 560 220" preserveAspectRatio="xMidYMid meet" aria-hidden="true">
@@ -74,16 +74,24 @@
             <line class="hp-grid" x1="20" y1="120" x2="540" y2="120"/>
             <line class="hp-grid" x1="20" y1="160" x2="540" y2="160"/>
             <line class="hp-axis" x1="20" y1="188" x2="540" y2="188"/>
-            <path class="hp-area" d="M20,150 L124,140 L228,120 L332,128 L436,96 L540,72 L540,188 L20,188 Z"/>
-            <polyline class="hp-series hp-c" points="20,176 124,178 228,170 332,172 436,166 540,158"/>
-            <polyline class="hp-series hp-b" points="20,168 124,160 228,150 332,138 436,132 540,118"/>
-            <polyline class="hp-series hp-a" points="20,150 124,140 228,120 332,128 436,96 540,72"/>
-            <circle class="hp-dot" cx="540" cy="72" r="3.5"/>
+            <path class="hp-area" id="hpArea" d="M20,77.4 L124,72.9 L228,60.1 L332,43.2 L436,33.9 L540,28.0 L540,188 L20,188 Z"/>
+            <polyline class="hp-series hp-b" id="hpOp" points="20,170.6 124,169.9 228,165.8 332,164.6 436,162.8 540,159.8"/>
+            <polyline class="hp-series hp-a" id="hpRev" points="20,77.4 124,72.9 228,60.1 332,43.2 436,33.9 540,28.0"/>
+            <circle class="hp-dot" id="hpd0" cx="20" cy="77.4" r="2.6"/>
+            <circle class="hp-dot" id="hpd1" cx="124" cy="72.9" r="2.6"/>
+            <circle class="hp-dot" id="hpd2" cx="228" cy="60.1" r="2.6"/>
+            <circle class="hp-dot" id="hpd3" cx="332" cy="43.2" r="2.6"/>
+            <circle class="hp-dot" id="hpd4" cx="436" cy="33.9" r="2.6"/>
+            <circle class="hp-dot" id="hpd5" cx="540" cy="28.0" r="3.4"/>
           </svg>
+          <div class="hp-legend">
+            <span class="lg lg-a">売上高</span>
+            <span class="lg lg-b">営業利益</span>
+          </div>
           <div class="hp-chips">
-            <div class="hp-chip"><div class="hp-chip-l">売上高</div><div class="hp-chip-v">6,830 <span class="up">▲</span></div></div>
-            <div class="hp-chip"><div class="hp-chip-l">営業利益</div><div class="hp-chip-v">1,024 <span class="up">▲</span></div></div>
-            <div class="hp-chip"><div class="hp-chip-l">ROE</div><div class="hp-chip-v">14.2% <span class="up">▲</span></div></div>
+            <div class="hp-chip"><div class="hp-chip-l">売上高</div><div class="hp-chip-v" id="hpcS">7,648億 <span class="up">▲</span></div></div>
+            <div class="hp-chip"><div class="hp-chip-l">営業利益</div><div class="hp-chip-v" id="hpcO">1,349億 <span class="up">▲</span></div></div>
+            <div class="hp-chip"><div class="hp-chip-l">ROE</div><div class="hp-chip-v" id="hpcR">21.6% <span class="up">▲</span></div></div>
           </div>
         </div>
       </div>
@@ -122,5 +130,34 @@
   </footer>
 
 </div>
+<script>
+(function(){
+  var DATA=[
+    {c:"4307",rev:[528873,550337,611634,692165,736556,764813],op:[83178,86502,106218,111832,120411,134907],s:"7,648億",o:"1,349億",r:"21.6%"},
+    {c:"3626",rev:[443717,448383,482547,508400,549004,571687],op:[44839,45748,54739,62328,64568,69047],s:"5,717億",o:"690億",r:"14.0%"},
+    {c:"3836",rev:[15691.53,16236.13,18703.39,21424.58,24419.76,28227.7],op:[2278.69,2796.09,3247.19,3289.39,4099.12,4604.15],s:"282億",o:"46億",r:"22.0%"}
+  ];
+  var xs=[20,124,228,332,436,540],yTop=28,yBot=188;
+  var seg=document.getElementById('hpSeg'); if(!seg) return;
+  var rev=document.getElementById('hpRev'),op=document.getElementById('hpOp'),area=document.getElementById('hpArea'),cap=document.getElementById('hpCap');
+  var cS=document.getElementById('hpcS'),cO=document.getElementById('hpcO'),cR=document.getElementById('hpcR');
+  var dots=[],k; for(k=0;k<6;k++) dots.push(document.getElementById('hpd'+k));
+  var btns=seg.getElementsByTagName('button');
+  function pts(a,mx){return xs.map(function(x,i){return x+','+(yBot-(a[i]/mx)*(yBot-yTop)).toFixed(1);});}
+  function setTxt(el,t){ if(el&&el.firstChild) el.firstChild.nodeValue=t+' '; }
+  function render(i){
+    var d=DATA[i],mx=Math.max.apply(null,d.rev),rp=pts(d.rev,mx),opp=pts(d.op,mx),j;
+    rev.setAttribute('points',rp.join(' '));
+    op.setAttribute('points',opp.join(' '));
+    area.setAttribute('d','M'+rp.join(' L')+' L540,188 L20,188 Z');
+    for(j=0;j<6;j++){ if(dots[j]){var xy=rp[j].split(','); dots[j].setAttribute('cx',xy[0]); dots[j].setAttribute('cy',xy[1]);} }
+    setTxt(cS,d.s); setTxt(cO,d.o); setTxt(cR,d.r);
+    if(cap) cap.textContent=d.c+' · 2020–2025';
+    for(j=0;j<btns.length;j++) btns[j].className=(j===i?'is-active':'');
+  }
+  for(k=0;k<btns.length;k++){ (function(idx){ btns[idx].addEventListener('click',function(){render(idx);}); })(k); }
+  render(0);
+})();
+</script>
 </body>
 </html>

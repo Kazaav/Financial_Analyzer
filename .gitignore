@@ -9,3 +9,6 @@ venv/
 *.log
 ex_company/
 改进方案*.md
+
+# local-only: contains server credentials, never commit
+scripts/upload_demo_pdfs.py
